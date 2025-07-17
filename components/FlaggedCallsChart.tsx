@@ -19,10 +19,10 @@ const FlaggedCallsChart: React.FC<FlaggedCallsChartProps> = ({ data }) => {
 
     return (
         <div className="rounded-lg p-4 sm:p-6 bg-qc-dark/10">
-            <h3 className="text-base sm:text-lg font-semibold mb-4 text-qc-primary">
+            <h3 className="text-base sm:text-xl font-semibold mb-4 text-qc-primary">
                 Flagged calls stat
             </h3>
-            <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-6">
+            <div className="h-3/4 flex flex-col sm:flex-row items-center justify-around space-y-4 sm:space-y-0 sm:space-x-6">
                 <div className="relative">
                     <svg width="300" height="300" viewBox="0 0 300 300" className="w-28 h-28 sm:w-32 sm:h-32 lg:w-40 lg:h-40">
                         {/* Non-flagged segment (brand accent) */}
