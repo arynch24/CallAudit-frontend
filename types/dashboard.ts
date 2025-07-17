@@ -3,7 +3,7 @@
  */
 export interface UserProfile {
     name: string;
-    managerId: string;
+    id: string;
     team: string;
     role: string;
 }
@@ -68,6 +68,7 @@ export interface FlaggedAudit {
     callId: string;
     timestamp: string;
     flaggedAt: string;
+    clientNumber: string;
 }
 
 /**

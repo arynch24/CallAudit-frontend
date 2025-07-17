@@ -1,43 +1,43 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useState, Dispatch, SetStateAction, useEffect } from 'react';
 import axios from 'axios';
-
-type User = {
-    userId: string,
-    email: string,
-    isVerified: boolean,
-};
+import { useRouter } from 'next/navigation';
+import { UserProfile } from '@/types/dashboard'
 
 type AuthContextType = {
-    user: User | null;
     success: boolean;
+    user: UserProfile | null;
+    setUser: Dispatch<SetStateAction<UserProfile | null>>;
+    setSuccess: Dispatch<SetStateAction<boolean>>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-    const [user, setUser] = useState<User | null>(null);
+    const [user, setUser] = useState<UserProfile | null>(null);
     const [success, setSuccess] = useState<boolean>(false);
+    const router = useRouter();
 
-    // Auto-fetch user on load
     useEffect(() => {
         const fetchUser = async () => {
             try {
-                const res = await axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/auth/check-auth`, {
+                const res = await axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auth/check-auth`, {
                     withCredentials: true,
                 });
-                setUser(res.data.userData);
+                setUser(res.data.user);
                 setSuccess(res.data.success);
             } catch (err) {
                 setUser(null);
+                router.push('/')
             }
         };
 
         fetchUser();
     }, []);
+
     return (
-        <AuthContext.Provider value={{ user, success }}>
+        <AuthContext.Provider value={{ user, setUser, success, setSuccess }}>
             {children}
         </AuthContext.Provider>
     );

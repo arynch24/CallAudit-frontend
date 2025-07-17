@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { Eye, EyeOff, CircleAlert } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import axios, { AxiosError } from 'axios';
+import { useAuthContext } from '@/context/AuthenticationContext';
+
 /**
  * QC Audit Sign-In Page Component
  * Minimal design with email/password authentication and role selection
@@ -19,6 +22,7 @@ const QCAuditSignIn = () => {
   const [showPassword, setShowPassword] = useState(false); // Password visibility toggle
   const [loading, setLoading] = useState(false); // Loading state during authentication
   const router = useRouter();
+  const { user, setUser } = useAuthContext();
 
   /**
    * Handle input changes for form fields
@@ -55,29 +59,40 @@ const QCAuditSignIn = () => {
     }
 
     try {
-      // Simulate API call to login endpoint with credentials
-      // Replace with actual API call to your backend
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // Mock successful login
-      console.log('Login successful:', {
+      const res = await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auth/login`, {
         email: form.email,
+        password: form.password,
         role: form.role
+      }, {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
       });
 
+      const userData= res.data;
+
+      setUser(userData.user);
+
       // Redirect to dashboard on successful authentication
-      if (form.role === 'manager') {
+      if (userData.user.role === 'manager') {
         router.push('/manager');
       }
-      else if (form.role === 'auditor') {
+      else if (userData.user.role === 'auditor') {
         router.push('/auditor');
       } else {
         setError('Invalid role selected');
       }
 
     } catch (error) {
-      // Handle authentication errors with user-friendly messages
-      setError('Invalid credentials. Please try again.');
+      const axiosError = error as AxiosError;
+
+      if (axiosError.response && axiosError.response.data) {
+        const message = (axiosError.response.data as { message?: string }).message;
+        setError(message || 'Something went wrong. Please try again.');
+      } else {
+        setError('Network error or server is not responding.');
+      }
     } finally {
       // Always reset loading state
       setLoading(false);
@@ -178,8 +193,8 @@ const QCAuditSignIn = () => {
                     className="sr-only"
                   />
                   <div className={`w-4 h-4 rounded-full border-2 mr-2 ${form.role === 'manager'
-                      ? 'bg-qc-dark border-qc-dark'
-                      : 'border-gray-300'
+                    ? 'bg-qc-dark border-qc-dark'
+                    : 'border-gray-300'
                     }`}>
                     {form.role === 'manager' && (
                       <div className="w-2 h-2 bg-white rounded-full mx-auto mt-0.5"></div>
@@ -199,8 +214,8 @@ const QCAuditSignIn = () => {
                     className="sr-only"
                   />
                   <div className={`w-4 h-4 rounded-full border-2 mr-2 ${form.role === 'auditor'
-                      ? 'bg-qc-dark border-qc-dark'
-                      : 'border-gray-300'
+                    ? 'bg-qc-dark border-qc-dark'
+                    : 'border-gray-300'
                     }`}>
                     {form.role === 'auditor' && (
                       <div className="w-2 h-2 bg-white rounded-full mx-auto mt-0.5"></div>
@@ -213,7 +228,7 @@ const QCAuditSignIn = () => {
 
             {/* Error message display */}
             {error && (
-              <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 p-3 rounded-md">
+              <div className="flex items-center gap-2 text-red-600 text-sm p-3 rounded-md">
                 <CircleAlert size={16} />
                 <p>{error}</p>
               </div>
@@ -225,8 +240,8 @@ const QCAuditSignIn = () => {
               onClick={handleSignIn}
               disabled={!form.email || !form.password || loading}
               className={`w-full py-2.5 px-4 rounded-xl text-sm font-medium transition-colors ${form.email && form.password
-                  ? 'bg-qc-dark/90 text-white hover:bg-qc-dark focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                ? 'bg-qc-dark/90 text-white hover:bg-qc-dark focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 }`}
             >
               {loading ? 'Signing in...' : 'Login'}
