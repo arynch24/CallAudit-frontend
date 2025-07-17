@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { Search, Phone, MessageCircle } from 'lucide-react';
-import StickyHeader from '@/components/StickyHeader';
 
 /**
  * Interface for individual person data

@@ -1,5 +1,3 @@
-
-
 import { StickyHeaderProps } from "@/types/dashboard";
 import React, { useState } from "react";
 import ProfileCard from "./ProfileCard";
@@ -46,7 +44,7 @@ const StickyHeader: React.FC<StickyHeaderProps> = ({ profile, header }) => {
                                     {profile.name}
                                 </p>
                                 <p className="text-xs text-qc-accent">
-                                    {profile.role}
+                                    {profile.role.replace(/\b\w/g, char => char.toUpperCase())}
                                 </p>
                             </div>
                             <ChevronDown

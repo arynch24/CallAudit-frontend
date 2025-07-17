@@ -3,9 +3,11 @@
 import { usePathname } from 'next/navigation';
 import Sidebar from "@/components/manager/ManSidebar";
 import StickyHeader from "@/components/StickyHeader";
+import { useAuthContext } from '@/context/AuthenticationContext';
 
 const DashboardLayout = ({ children }: Readonly<{ children: React.ReactNode; }>) => {
     const pathname = usePathname();
+    const { user } = useAuthContext();
 
     // Function to get header text based on current path
     const getHeaderText = (path: string): string => {
@@ -35,10 +37,10 @@ const DashboardLayout = ({ children }: Readonly<{ children: React.ReactNode; }>)
                 <StickyHeader
                     header={getHeaderText(pathname)}
                     profile={{
-                        name: 'sfoshhfj',
-                        managerId: 'sfoshhfj',
-                        team: 'sfoshhfj',
-                        role: 'sfoshhfj'
+                        name: user?.name || '',
+                        id: user?.id || '',
+                        team: 'teamname',
+                        role: user?.role || ''
                     }}
                 />
                 {/* Main Content */}
