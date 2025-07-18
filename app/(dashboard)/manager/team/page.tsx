@@ -26,7 +26,7 @@ interface StatsCardData {
     label: string;
     icon: React.ComponentType<any>;
     isHighlighted?: boolean;
-}   
+}
 
 /**
  * API Response interface for auditors endpoint
@@ -106,9 +106,9 @@ function transformAuditor(apiAuditor: AuditorsApiResponse['auditors'][0]): Perso
     return {
         id: apiAuditor.id,
         name: apiAuditor.name,
-        role: `Assigned: ${apiAuditor.total_assigned_leads}`,
-        callCount: apiAuditor.total_audited_leads,
-        messageCount: Math.floor(apiAuditor.total_audited_leads * 0.3) // Mock message count
+        role: apiAuditor.id,
+        callCount: apiAuditor.total_assigned_leads,
+        messageCount: apiAuditor.total_audited_leads
     };
 }
 
@@ -116,7 +116,7 @@ function transformCounsellor(apiCounsellor: CounsellorsApiResponse['counsellors'
     return {
         id: apiCounsellor.id,
         name: apiCounsellor.name,
-        role: apiCounsellor.email,
+        role: apiCounsellor.id,
         callCount: apiCounsellor.total_calls
     };
 }
