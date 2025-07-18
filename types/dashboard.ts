@@ -71,11 +71,22 @@ export interface FlaggedAudit {
     clientNumber: string;
 }
 
+export interface LatestCalls {
+    id: string;
+    callStart: string;
+    clientNumber: string;
+}
+
+
 /**
  * Props interface for LatestFlaggedAudits component
  */
 export interface LatestFlaggedAuditsProps {
     audits: FlaggedAudit[];
+}
+
+export interface LatestAiAuditsProps{
+    audits:LatestCalls[];
 }
 
 /**
