@@ -1,10 +1,13 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Search, Phone, MessageCircle } from 'lucide-react';
+import { Search, Phone, MessageCircle, Users, UserCheck } from 'lucide-react';
+import axios from 'axios';
+import Loader from '@/components/Loader';
+import Error from '@/components/ErrorBox'
 
 /**
- * Interface for individual person data
+ * Interface for individual person data displayed in the UI
  */
 interface PersonData {
     id: string;
@@ -12,6 +15,7 @@ interface PersonData {
     role: string;
     callCount: number;
     messageCount?: number;
+    email?: string;
 }
 
 /**
@@ -20,270 +24,252 @@ interface PersonData {
 interface StatsCardData {
     value: number;
     label: string;
+    icon: React.ComponentType<any>;
     isHighlighted?: boolean;
+}   
+
+/**
+ * API Response interface for auditors endpoint
+ */
+interface AuditorsApiResponse {
+    success: boolean;
+    message: string;
+    number_of_auditors: number;
+    total_audited_calls: number;
+    auditors: {
+        id: string;
+        name: string;
+        total_assigned_leads: number;
+        total_audited_leads: number;
+    }[];
 }
 
 /**
- * Raw API response interfaces - represents the actual API structure
+ * API Response interface for counsellors endpoint  
  */
-interface ApiAuditorResponse {
-    auditor_id: string;
-    full_name: string;
-    employee_id: string;
-    total_calls_audited: number;
-    total_messages_sent: number;
-    department: string;
-    status: 'active' | 'inactive';
-}
-
-interface ApiCounsellorResponse {
-    counsellor_id: string;
-    name: string;
-    employee_code: string;
-    calls_made: number;
-    department: string;
-    status: 'active' | 'inactive';
-}
-
-interface ApiStatsResponse {
-    total_auditors: number;
-    total_audited_calls: number;
+interface CounsellorsApiResponse {
+    success: boolean;
+    message: string;
     total_counsellors: number;
     total_calls_made: number;
-    last_updated: string;
+    counsellors: {
+        id: string;
+        name: string;
+        email: string;
+        total_calls: number;
+    }[];
 }
 
-interface ApiDashboardResponse {
-    stats: ApiStatsResponse;
-    auditors: ApiAuditorResponse[];
-    counsellors: ApiCounsellorResponse[];
-    success: boolean;
-    message?: string;
+/**
+ * Combined dashboard data structure
+ */
+interface DashboardData {
+    stats: StatsCardData[];
+    auditors: PersonData[];
+    counsellors: PersonData[];
+    totalAuditors: number;
+    totalCounsellors: number;
 }
 
-interface DashboardProps {
-    // No props needed for now, can be extended later
+/**
+ * Interface for the global cache structure
+ * Manages cached data, timestamp, loading state, and error state
+ */
+interface DashboardCache {
+    data: DashboardData | null;
+    timestamp: number | null;
+    isLoading: boolean;
+    error: string | null;
 }
+
+/**
+ * Global cache object that persists across component re-renders and navigation
+ * This ensures data is not refetched unnecessarily when navigating back to the dashboard
+ */
+const dashboardCache: DashboardCache = {
+    data: null,
+    timestamp: null,
+    isLoading: false,
+    error: null
+};
+
+/**
+ * Cache duration in milliseconds (5 minutes)
+ * Data will be considered stale after this duration and will be refetched
+ */
+const CACHE_DURATION = 5 * 60 * 1000;
 
 /**
  * Data transformation utilities
  */
-class DataTransformer {
-    /**
-     * Transforms API auditor response to PersonData format
-     */
-    static transformAuditor(apiAuditor: ApiAuditorResponse): PersonData {
-        return {
-            id: apiAuditor.auditor_id,
-            name: apiAuditor.full_name,
-            role: `ID: ${apiAuditor.employee_id}`,
-            callCount: apiAuditor.total_calls_audited,
-            messageCount: apiAuditor.total_messages_sent
-        };
+function transformAuditor(apiAuditor: AuditorsApiResponse['auditors'][0]): PersonData {
+    return {
+        id: apiAuditor.id,
+        name: apiAuditor.name,
+        role: `Assigned: ${apiAuditor.total_assigned_leads}`,
+        callCount: apiAuditor.total_audited_leads,
+        messageCount: Math.floor(apiAuditor.total_audited_leads * 0.3) // Mock message count
+    };
+}
+
+function transformCounsellor(apiCounsellor: CounsellorsApiResponse['counsellors'][0]): PersonData {
+    return {
+        id: apiCounsellor.id,
+        name: apiCounsellor.name,
+        role: apiCounsellor.email,
+        callCount: apiCounsellor.total_calls
+    };
+}
+
+function createStatsData(
+    auditorsResponse: AuditorsApiResponse,
+    counsellorsResponse: CounsellorsApiResponse
+): StatsCardData[] {
+    return [
+        {
+            value: auditorsResponse.number_of_auditors,
+            label: 'Auditors',
+            icon: UserCheck
+        },
+        {
+            value: auditorsResponse.total_audited_calls,
+            label: 'Total audited calls',
+            icon: Phone,
+            isHighlighted: true
+        },
+        {
+            value: counsellorsResponse.total_counsellors,
+            label: 'Counsellors',
+            icon: Users
+        },
+        {
+            value: counsellorsResponse.total_calls_made,
+            label: 'Total calls made',
+            icon: Phone,
+            isHighlighted: true
+        }
+    ];
+}
+
+/**
+ * Fetches dashboard data from API endpoints with intelligent caching
+ * 
+ * @param {boolean} force - If true, bypasses cache and forces a fresh API call
+ * @returns {Promise<DashboardData>} Combined dashboard data
+ */
+async function fetchDashboardData(force: boolean = false): Promise<DashboardData> {
+    // Prevent multiple simultaneous API calls
+    if (dashboardCache.isLoading) {
+        // Wait for ongoing request to complete
+        while (dashboardCache.isLoading) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        // Return cached data if available after waiting
+        if (dashboardCache.data) {
+            return dashboardCache.data;
+        }
     }
 
-    /**
-     * Transforms API counsellor response to PersonData format
-     */
-    static transformCounsellor(apiCounsellor: ApiCounsellorResponse): PersonData {
-        return {
-            id: apiCounsellor.counsellor_id,
-            name: apiCounsellor.name,
-            role: `ID: ${apiCounsellor.employee_code}`,
-            callCount: apiCounsellor.calls_made
-        };
+    // Skip API call if we have valid cached data (unless forced)
+    if (!force && dashboardCache.data && isCacheValid()) {
+        return dashboardCache.data;
     }
 
-    /**
-     * Transforms API stats response to StatsCardData format
-     */
-    static transformStats(apiStats: ApiStatsResponse): StatsCardData[] {
-        return [
-            { value: apiStats.total_auditors, label: 'Auditors' },
-            { value: apiStats.total_audited_calls, label: 'Total audited calls', isHighlighted: true },
-            { value: apiStats.total_counsellors, label: 'Counsellors' },
-            { value: apiStats.total_calls_made, label: 'Total calls made', isHighlighted: true }
-        ];
+    try {
+        // Update loading state in cache
+        dashboardCache.isLoading = true;
+
+        // Make parallel API calls for better performance
+        const [audResponse, counResponse] = await Promise.all([
+            axios.get('http://localhost:8000/api/v1/manager/auditors', {
+                withCredentials: true
+            }),
+            axios.get('http://localhost:8000/api/v1/manager/counsellor', {
+                withCredentials: true
+            })
+        ]);
+
+        const auditorsResponse: AuditorsApiResponse = audResponse.data;
+        const counsellorsResponse: CounsellorsApiResponse = counResponse.data;
+
+        // Transform API responses
+        const transformedAuditors = auditorsResponse.auditors.map(transformAuditor);
+        const transformedCounsellors = counsellorsResponse.counsellors.map(transformCounsellor);
+        const statsData = createStatsData(auditorsResponse, counsellorsResponse);
+
+        const dashboardData: DashboardData = {
+            stats: statsData,
+            auditors: transformedAuditors,
+            counsellors: transformedCounsellors,
+            totalAuditors: auditorsResponse.number_of_auditors,
+            totalCounsellors: counsellorsResponse.total_counsellors
+        };
+
+        // Update global cache with fresh data
+        dashboardCache.data = dashboardData;
+        dashboardCache.timestamp = Date.now();
+        dashboardCache.error = null;
+
+        return dashboardData;
+    } catch (error: any) {
+        // Handle API errors
+        const errorMsg = error.message || 'Failed to fetch dashboard data';
+        dashboardCache.error = errorMsg;
+        throw error;
+    } finally {
+        // Reset loading state
+        dashboardCache.isLoading = false;
     }
 }
 
 /**
- * Mock API service - simulates real API calls
+ * Checks if the cached data is still valid based on the cache duration
+ * 
+ * @returns {boolean} True if cache is valid, false if expired or no cache exists
  */
-class MockApiService {
-    /**
-     * Simulates API delay
-     */
-    private static delay(ms: number): Promise<void> {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    /**
-     * Mock dashboard data - simulates API response structure
-     */
-    private static mockDashboardData: ApiDashboardResponse = {
-        success: true,
-        stats: {
-            total_auditors: 2,
-            total_audited_calls: 200,
-            total_counsellors: 30,
-            total_calls_made: 300,
-            last_updated: new Date().toISOString()
-        },
-        auditors: [
-            {
-                auditor_id: '1',
-                full_name: 'Rishit Kumar',
-                employee_id: 'PW80815',
-                total_calls_audited: 123,
-                total_messages_sent: 60,
-                department: 'Quality Assurance',
-                status: 'active'
-            },
-            {
-                auditor_id: '2',
-                full_name: 'Anuj Kumar',
-                employee_id: 'PW80816',
-                total_calls_audited: 120,
-                total_messages_sent: 30,
-                department: 'Quality Assurance',
-                status: 'active'
-            },
-            {
-                auditor_id: '3',
-                full_name: 'Pushkar Kumar',
-                employee_id: 'PW80817',
-                total_calls_audited: 60,
-                total_messages_sent: 20,
-                department: 'Quality Assurance',
-                status: 'active'
-            },
-            {
-                auditor_id: '4',
-                full_name: 'Ayush Gautam',
-                employee_id: 'PW80818',
-                total_calls_audited: 100,
-                total_messages_sent: 45,
-                department: 'Quality Assurance',
-                status: 'active'
-            }
-        ],
-        counsellors: [
-            {
-                counsellor_id: '5',
-                name: 'Rishit Kumar',
-                employee_code: 'PW80815',
-                calls_made: 60,
-                department: 'Customer Support',
-                status: 'active'
-            },
-            {
-                counsellor_id: '6',
-                name: 'Anuj Kumar',
-                employee_code: 'PW80816',
-                calls_made: 56,
-                department: 'Customer Support',
-                status: 'active'
-            },
-            {
-                counsellor_id: '7',
-                name: 'Raman Pandey',
-                employee_code: 'PW80817',
-                calls_made: 54,
-                department: 'Customer Support',
-                status: 'active'
-            },
-            {
-                counsellor_id: '8',
-                name: 'Aryan Kohli',
-                employee_code: 'PW80818',
-                calls_made: 45,
-                department: 'Customer Support',
-                status: 'active'
-            },
-            {
-                counsellor_id: '9',
-                name: 'Shoyeb Ansari',
-                employee_code: 'PW80819',
-                calls_made: 40,
-                department: 'Customer Support',
-                status: 'active'
-            },
-            {
-                counsellor_id: '10',
-                name: 'Shivam Kumar',
-                employee_code: 'PW80820',
-                calls_made: 35,
-                department: 'Customer Support',
-                status: 'active'
-            }
-        ]
-    };
-
-    /**
-     * Fetches dashboard data - simulates API call
-     */
-    static async fetchDashboardData(): Promise<ApiDashboardResponse> {
-        await this.delay(800); // Simulate network delay
-
-        // Simulate potential API error (uncomment to test error handling)
-        // if (Math.random() < 0.1) {
-        //   throw new Error('Failed to fetch dashboard data');
-        // }
-
-        return this.mockDashboardData;
-    }
-
-    /**
-     * Searches people by query - simulates search API call
-     */
-    static async searchPeople(query: string): Promise<{
-        auditors: ApiAuditorResponse[];
-        counsellors: ApiCounsellorResponse[];
-    }> {
-        await this.delay(300); // Simulate network delay
-
-        if (!query.trim()) {
-            return {
-                auditors: this.mockDashboardData.auditors,
-                counsellors: this.mockDashboardData.counsellors
-            };
-        }
-
-        const searchTerm = query.toLowerCase();
-
-        const filteredAuditors = this.mockDashboardData.auditors.filter(auditor =>
-            auditor.full_name.toLowerCase().includes(searchTerm) ||
-            auditor.employee_id.toLowerCase().includes(searchTerm)
-        );
-
-        const filteredCounsellors = this.mockDashboardData.counsellors.filter(counsellor =>
-            counsellor.name.toLowerCase().includes(searchTerm) ||
-            counsellor.employee_code.toLowerCase().includes(searchTerm)
-        );
-
-        return {
-            auditors: filteredAuditors,
-            counsellors: filteredCounsellors
-        };
-    }
+function isCacheValid(): boolean {
+    if (!dashboardCache.timestamp) return false;
+    return Date.now() - dashboardCache.timestamp < CACHE_DURATION;
 }
 
+function filterPeople(query: string, dashboardData: DashboardData): {
+    auditors: PersonData[];
+    counsellors: PersonData[];
+} {
+    if (!query.trim()) {
+        return {
+            auditors: dashboardData.auditors,
+            counsellors: dashboardData.counsellors
+        };
+    }
+
+    const searchTerm = query.toLowerCase();
+
+    const filteredAuditors = dashboardData.auditors.filter(auditor =>
+        auditor.name.toLowerCase().includes(searchTerm)
+    );
+
+    const filteredCounsellors = dashboardData.counsellors.filter(counsellor =>
+        counsellor.name.toLowerCase().includes(searchTerm)
+    );
+
+    return {
+        auditors: filteredAuditors,
+        counsellors: filteredCounsellors
+    };
+}
+
+// Component interfaces
 interface StatsCardProps {
     data: StatsCardData;
 }
 
-/**
- * Props for PersonCard component
- */
 interface PersonCardProps {
     person: PersonData;
     showMessages?: boolean;
 }
 
-/**
- * Props for PersonList component
- */
 interface PersonListProps {
     title: string;
     people: PersonData[];
@@ -292,9 +278,6 @@ interface PersonListProps {
     isLoading?: boolean;
 }
 
-/**
- * Props for SearchBar component
- */
 interface SearchBarProps {
     onSearch: (query: string) => void;
     placeholder?: string;
@@ -305,34 +288,33 @@ interface SearchBarProps {
  * StatsCard component - displays metric cards at the top
  */
 const StatsCard: React.FC<StatsCardProps> = ({ data }) => {
-    const { value, label, isHighlighted = false } = data;
+    const { value, label, icon: Icon } = data;
 
     return (
         <div
             className={`
-        rounded-xl p-6 transition-all duration-200
-        ${isHighlighted
-                    ? 'bg-gradient-to-br from-blue-50 to-blue-100 border border-blue-200'
-                    : 'bg-gray-100 hover:bg-gray-200'
-                }
-      `}
-            style={{
-                backgroundColor: isHighlighted ? 'rgba(118, 149, 205, 0.1)' : 'rgba(156, 163, 175, 0.2)',
-                borderColor: isHighlighted ? 'rgba(118, 149, 205, 0.3)' : 'transparent'
-            }}
+                rounded-xl p-6 bg-qc-dark/10
+            `}
         >
-            <div className="text-3xl md:text-4xl font-bold mb-2" style={{ color: 'var(--color-qc-primary)' }}>
-                {value}
-            </div>
-            <div className="text-sm md:text-base font-medium" style={{ color: 'var(--color-qc-dark)' }}>
-                {label}
+            <div className="flex items-start justify-between">
+                <div className="flex-1">
+                    <div className="text-2xl md:text-3xl font-bold mb-2 text-gray-800">
+                        {value}
+                    </div>
+                    <div className="text-sm md:text-base font-medium text-gray-600">
+                        {label}
+                    </div>
+                </div>
+                <div className="ml-3">
+                    <Icon className="h-6 w-6 text-qc-accent" />
+                </div>
             </div>
         </div>
     );
 };
 
 /**
- * SearchBar component - handles search functionality
+ * SearchBar component - handles search functionality with instant filtering
  */
 const SearchBar: React.FC<SearchBarProps> = ({
     onSearch,
@@ -344,16 +326,19 @@ const SearchBar: React.FC<SearchBarProps> = ({
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setSearchQuery(value);
+        // Call onSearch on every keystroke for instant filtering
         onSearch(value);
+    };
+
+    const clearSearch = () => {
+        setSearchQuery('');
+        onSearch('');
     };
 
     return (
         <div className="relative mb-8">
             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <Search
-                    className={`h-5 w-5 transition-all ${isLoading ? 'animate-pulse' : ''}`}
-                    style={{ color: 'var(--color-qc-accent)' }}
-                />
+                <Search className="h-5 w-5 text-gray-400" />
             </div>
             <input
                 type="text"
@@ -361,9 +346,22 @@ const SearchBar: React.FC<SearchBarProps> = ({
                 onChange={handleInputChange}
                 placeholder={placeholder}
                 disabled={isLoading}
-                className={`w-full pl-12 pr-4 py-4 rounded-xl border-0 text-qc-primary focus:outline-none focus:ring-2 transition-all duration-200 text-base ${isLoading ? 'opacity-50 cursor-not-allowed' : ''
-                    }`}
+                className={`
+                    w-full pl-12 pr-16 py-4 rounded-xl border-0 
+                 shadow-sm text-gray-900 bg-qc-dark/10 focus:outline-none focus:ring-1 focus:ring-qc-accent transition-all duration-200 text-base
+                    ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}
+                `}
             />
+            {searchQuery && (
+                <button
+                    onClick={clearSearch}
+                    className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            )}
         </div>
     );
 };
@@ -375,23 +373,17 @@ const PersonCard: React.FC<PersonCardProps> = ({ person, showMessages = false })
     const { name, role, callCount, messageCount } = person;
 
     return (
-        <div
-            className="flex items-center justify-between p-4 rounded-xl mb-3 transition-all duration-200 hover:shadow-md"
-            style={{ backgroundColor: 'rgba(156, 163, 175, 0.1)' }}
-        >
+        <div className="flex items-center justify-between p-4 rounded-xl mb-3 transition-all duration-200 hover:shadow-md bg-gray-50">
             {/* Left side - Avatar and info */}
             <div className="flex items-center space-x-3">
-                <div
-                    className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold"
-                    style={{ backgroundColor: 'var(--color-qc-accent)' }}
-                >
+                <div className="w-12 h-12 rounded-full bg-qc-accent flex items-center justify-center text-white font-semibold">
                     {name.charAt(0)}
                 </div>
                 <div>
-                    <div className="font-medium text-base" style={{ color: 'var(--color-qc-primary)' }}>
+                    <div className="font-medium text-base text-gray-800">
                         {name}
                     </div>
-                    <div className="text-sm opacity-70" style={{ color: 'var(--color-qc-dark)' }}>
+                    <div className="text-sm text-gray-600">
                         {role}
                     </div>
                 </div>
@@ -400,15 +392,15 @@ const PersonCard: React.FC<PersonCardProps> = ({ person, showMessages = false })
             {/* Right side - Call and message counts */}
             <div className="flex items-center space-x-4">
                 <div className="flex items-center space-x-1">
-                    <Phone className="h-4 w-4" style={{ color: 'var(--color-qc-accent)' }} />
-                    <span className="text-sm font-medium" style={{ color: 'var(--color-qc-primary)' }}>
+                    <Phone className="h-4 w-4 text-qc-dark" />
+                    <span className="text-sm font-medium text-gray-800">
                         {callCount}
                     </span>
                 </div>
                 {showMessages && messageCount !== undefined && (
                     <div className="flex items-center space-x-1">
-                        <MessageCircle className="h-4 w-4" style={{ color: 'var(--color-qc-accent)' }} />
-                        <span className="text-sm font-medium" style={{ color: 'var(--color-qc-primary)' }}>
+                        <MessageCircle className="h-4 w-4 text-qc-dark" />
+                        <span className="text-sm font-medium text-gray-800">
                             {messageCount}
                         </span>
                     </div>
@@ -429,30 +421,18 @@ const PersonList: React.FC<PersonListProps> = ({
     isLoading = false
 }) => {
     return (
-        <div
-            className="rounded-xl p-6"
-            style={{ backgroundColor: 'rgba(118, 149, 205, 0.08)' }}
-        >
+        <div className="rounded-xl p-6 bg-qc-dark/10">
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center space-x-3">
-                    <h2 className="text-xl md:text-2xl font-bold" style={{ color: 'var(--color-qc-primary)' }}>
+                    <h2 className="text-xl md:text-2xl font-bold text-gray-800">
                         {title}
                     </h2>
-                    <span
-                        className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-sm font-medium"
-                        style={{
-                            backgroundColor: 'var(--color-qc-accent)',
-                            color: 'white'
-                        }}
-                    >
+                    <span className="bg-qc-accent text-white px-3 py-1 rounded-full text-sm font-medium">
                         {totalCount}
                     </span>
                 </div>
-                <button
-                    className="text-sm font-medium hover:opacity-75 transition-opacity underline"
-                    style={{ color: 'var(--color-qc-accent)' }}
-                >
+                <button className="text-sm font-medium text-qc-dark hover:text-blue-700 transition-colors underline">
                     View more
                 </button>
             </div>
@@ -462,7 +442,7 @@ const PersonList: React.FC<PersonListProps> = ({
                 <div className="space-y-3">
                     {[...Array(3)].map((_, index) => (
                         <div key={index} className="animate-pulse">
-                            <div className="flex items-center space-x-3 p-4 rounded-xl" style={{ backgroundColor: 'rgba(156, 163, 175, 0.1)' }}>
+                            <div className="flex items-center space-x-3 p-4 rounded-xl bg-gray-50">
                                 <div className="w-12 h-12 bg-gray-300 rounded-full"></div>
                                 <div className="flex-1 space-y-2">
                                     <div className="h-4 bg-gray-300 rounded w-3/4"></div>
@@ -490,7 +470,7 @@ const PersonList: React.FC<PersonListProps> = ({
                             />
                         ))
                     ) : (
-                        <div className="text-center py-8" style={{ color: 'var(--color-qc-dark)' }}>
+                        <div className="text-center py-8 text-gray-500">
                             <p className="text-lg">No {title.toLowerCase()} found</p>
                             <p className="text-sm opacity-70">Try adjusting your search criteria</p>
                         </div>
@@ -502,171 +482,156 @@ const PersonList: React.FC<PersonListProps> = ({
 };
 
 /**
- * Main Dashboard component
+ * Main Dashboard component with intelligent caching
+ * 
+ * Features:
+ * - Automatic caching to prevent unnecessary API calls
+ * - Cache expiration after 5 minutes
+ * - Graceful error handling with fallback to cached data
+ * - Instant search filtering without API calls
+ * - Optimistic UI updates for better user experience
  */
-const Dashboard: React.FC<DashboardProps> = () => {
-    // State management
-    const [statsData, setStatsData] = useState<StatsCardData[]>([]);
-    const [auditors, setAuditors] = useState<PersonData[]>([]);
-    const [counsellors, setCounsellors] = useState<PersonData[]>([]);
-    const [originalAuditors, setOriginalAuditors] = useState<PersonData[]>([]);
-    const [originalCounsellors, setOriginalCounsellors] = useState<PersonData[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [isSearching, setIsSearching] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+const ManagerTeamDashboard: React.FC = () => {
+    // Initialize component state with cached values if available
+    const [dashboardData, setDashboardData] = useState<DashboardData | null>(dashboardCache.data);
+    const [displayAuditors, setDisplayAuditors] = useState<PersonData[]>(dashboardCache.data?.auditors || []);
+    const [displayCounsellors, setDisplayCounsellors] = useState<PersonData[]>(dashboardCache.data?.counsellors || []);
+    const [isLoading, setIsLoading] = useState<boolean>(dashboardCache.isLoading);
+    const [error, setError] = useState<string>(dashboardCache.error || '');
 
     /**
-     * Fetches initial dashboard data on component mount
+     * Fetches dashboard data with intelligent caching
+     * 
+     * @param {boolean} force - If true, bypasses cache and forces a fresh API call
+     * @returns {Promise<void>}
      */
-    useEffect(() => {
-        const fetchInitialData = async () => {
-            try {
-                setIsLoading(true);
-                setError(null);
+    const fetchData = async (force: boolean = false): Promise<void> => {
+        // Skip if we have valid cached data (unless forced)
+        if (!force && dashboardData && isCacheValid()) {
+            return;
+        }
 
-                const response = await MockApiService.fetchDashboardData();
-
-                if (response.success) {
-                    // Transform API data to component format
-                    const transformedStats = DataTransformer.transformStats(response.stats);
-                    const transformedAuditors = response.auditors.map(DataTransformer.transformAuditor);
-                    const transformedCounsellors = response.counsellors.map(DataTransformer.transformCounsellor);
-
-                    // Update state
-                    setStatsData(transformedStats);
-                    setAuditors(transformedAuditors);
-                    setCounsellors(transformedCounsellors);
-                    setOriginalAuditors(transformedAuditors);
-                    setOriginalCounsellors(transformedCounsellors);
-                } else {
-                    setError(response.message || 'Failed to fetch dashboard data');
-                }
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'An unexpected error occurred');
-                console.error('Dashboard data fetch error:', err);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchInitialData();
-    }, []);
-
-    /**
-     * Handles search functionality with API call
-     */
-    const handleSearch = async (query: string) => {
         try {
-            setIsSearching(true);
-            setError(null);
+            setIsLoading(true);
+            setError('');
 
-            const response = await MockApiService.searchPeople(query);
+            const data = await fetchDashboardData(force);
 
-            // Transform API response to component format
-            const transformedAuditors = response.auditors.map(DataTransformer.transformAuditor);
-            const transformedCounsellors = response.counsellors.map(DataTransformer.transformCounsellor);
-
-            // Update filtered data
-            setAuditors(transformedAuditors);
-            setCounsellors(transformedCounsellors);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Search failed');
-            console.error('Search error:', err);
+            setDashboardData(data);
+            setDisplayAuditors(data.auditors);
+            setDisplayCounsellors(data.counsellors);
+        } catch (err: any) {
+            const errorMsg = err.message || 'Failed to fetch dashboard data';
+            setError(errorMsg);
         } finally {
-            setIsSearching(false);
+            setIsLoading(false);
         }
     };
 
-    // Loading state
-    if (isLoading) {
+    /**
+     * Handles search functionality with instant filtering
+     * Filters data locally without making API calls
+     * 
+     * @param {string} query - Search query string
+     */
+    const handleSearch = (query: string) => {
+        if (!dashboardData) return;
+
+        // Instantly filter the data without API calls
+        const filteredData = filterPeople(query, dashboardData);
+
+        setDisplayAuditors(filteredData.auditors);
+        setDisplayCounsellors(filteredData.counsellors);
+    };
+
+    /**
+     * Effect hook that runs on component mount
+     * Checks for cached data and fetches fresh data if needed
+     */
+    useEffect(() => {
+        // Check if we have valid cached data
+        if (dashboardCache.data && isCacheValid()) {
+            // Use cached data immediately for faster rendering
+            setDashboardData(dashboardCache.data);
+            setDisplayAuditors(dashboardCache.data.auditors);
+            setDisplayCounsellors(dashboardCache.data.counsellors);
+            setError(dashboardCache.error || '');
+            setIsLoading(false);
+        } else {
+            // Cache is stale or doesn't exist, fetch fresh data
+            fetchData();
+        }
+    }, []);
+
+    // Show loading spinner only if we don't have any data to display
+    if (isLoading && !dashboardData) {
         return (
-            <div className="min-h-screen p-4 md:p-6 lg:p-8" style={{ backgroundColor: '#f8fafc' }}>
-                <div className="max-w-7xl mx-auto">
-                    {/* Stats Cards Loading */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
-                        {[...Array(4)].map((_, index) => (
-                            <div key={index} className="animate-pulse">
-                                <div className="rounded-xl p-6 bg-gray-200 h-24"></div>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Search Bar Loading */}
-                    <div className="animate-pulse mb-8">
-                        <div className="w-full h-14 bg-gray-200 rounded-xl"></div>
-                    </div>
-
-                    {/* Content Loading */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-                        {[...Array(2)].map((_, index) => (
-                            <div key={index} className="animate-pulse">
-                                <div className="rounded-xl p-6 bg-gray-200 h-96"></div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
+            <Loader
+                text='Loading Teams'
+            />
         );
     }
 
-    // Error state
-    if (error) {
+    // Show error page only if we have an error and no cached data to fall back to
+    if (error && !dashboardData) {
         return (
-            <div className="min-h-screen p-4 md:p-6 lg:p-8 flex items-center justify-center" style={{ backgroundColor: '#f8fafc' }}>
-                <div className="text-center">
-                    <div className="text-red-500 text-6xl mb-4">⚠️</div>
-                    <h2 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-qc-primary)' }}>
-                        Something went wrong
-                    </h2>
-                    <p className="text-gray-600 mb-4">{error}</p>
-                    <button
-                        onClick={() => window.location.reload()}
-                        className="px-6 py-3 rounded-lg text-white font-medium hover:opacity-90 transition-opacity"
-                        style={{ backgroundColor: 'var(--color-qc-accent)' }}
-                    >
-                        Try Again
-                    </button>
-                </div>
-            </div>
+            <Error
+                title='Something went wrong'
+                message={error}
+                onRetry={() => fetchData(true)}
+            />
         );
     }
 
     return (
-        <div className="min-h-screen p-4 md:p-6 lg:p-8" style={{ backgroundColor: '#f8fafc' }}>
-            <div className="max-w-7xl mx-auto">
-                {/* Stats Cards */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
-                    {statsData.map((stat, index) => (
-                        <StatsCard key={index} data={stat} />
-                    ))}
-                </div>
+        <div className="min-h-screen">
+            <div className="p-4 md:p-6 lg:p-8">
+                <div className="max-w-7xl mx-auto">
+                    {dashboardData && (
+                        <>
+                            {/* Stats Cards */}
+                            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
+                                {dashboardData.stats.map((stat, index) => (
+                                    <StatsCard key={index} data={stat} />
+                                ))}
+                            </div>
 
-                {/* Search Bar */}
-                <SearchBar onSearch={handleSearch} isLoading={isSearching} />
+                            {/* Search Bar */}
+                            <SearchBar onSearch={handleSearch} isLoading={false} />
 
-                {/* Content Grid */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
-                    {/* Auditors Section */}
-                    <PersonList
-                        title="Auditors"
-                        people={auditors}
-                        totalCount={originalAuditors.length}
-                        showMessages={true}
-                        isLoading={isSearching}
-                    />
+                            {/* Content Grid */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+                                {/* Auditors Section */}
+                                <PersonList
+                                    title="Auditors"
+                                    people={displayAuditors}
+                                    totalCount={dashboardData.totalAuditors}
+                                    showMessages={true}
+                                    isLoading={false}
+                                />
 
-                    {/* Counsellors Section */}
-                    <PersonList
-                        title="Counsellor"
-                        people={counsellors}
-                        totalCount={originalCounsellors.length}
-                        showMessages={false}
-                        isLoading={isSearching}
-                    />
+                                {/* Counsellors Section */}
+                                <PersonList
+                                    title="Counsellors"
+                                    people={displayCounsellors}
+                                    totalCount={dashboardData.totalCounsellors}
+                                    showMessages={false}
+                                    isLoading={false}
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    {/* Warning message if there's an error but we have cached data to show */}
+                    {error && dashboardData && (
+                        <div className="mt-4 p-4 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded">
+                            Warning: Failed to refresh data. Showing cached data. Error: {error}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
     );
 };
 
-export default Dashboard;
+export default ManagerTeamDashboard;

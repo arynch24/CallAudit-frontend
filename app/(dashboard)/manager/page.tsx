@@ -4,7 +4,7 @@ import { Phone, Users, ClipboardList, Flag } from 'lucide-react';
 import { DashboardStat, FlaggedCallsStats, FlaggedAudit, DailyAuditData } from '@/types/dashboard';
 import StatCard from '@/components/StatCard';
 import FlaggedCallsChart from '@/components/FlaggedCallsChart';
-import LatestFlaggedAudits from '@/components/LatestFlaggedAudits';
+import LatestFlaggedAudits from '@/components/manager/LatestFlaggedAudits';
 import WeeklyAuditChart from '@/components/DailyAuditChart';
 import { useEffect, useState } from 'react';
 import axios from 'axios';
