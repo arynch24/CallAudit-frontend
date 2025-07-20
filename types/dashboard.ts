@@ -16,7 +16,6 @@ export interface StickyHeaderProps {
     header?: string;
 }
 
-
 /**
  * Props interface for ProfileCard component
  */
@@ -58,7 +57,6 @@ export interface FlaggedCallsStats {
     totalCalls: number;
 }
 
-
 /**
  * Interface for flagged audit entries
  */
@@ -76,7 +74,6 @@ export interface LatestCalls {
     callStart: string;
     clientNumber: string;
 }
-
 
 /**
  * Props interface for LatestFlaggedAudits component
@@ -103,4 +100,46 @@ export interface DailyAuditChartProps {
 export interface DailyAuditData {
     day: string;
     percentage: number;
+}
+
+export /**
+* Interface for transformed audit data structures
+*/
+interface AuditItem {
+ id: string;
+ callId: string;
+ duration: number;
+ confidence: number;
+ tags: string[];
+ type: string;
+ summary: string;
+ sentiments: 'Positive' | 'Negative' | 'Neutral';
+ anomalies: string;
+ recordingUrl?: string;
+ callRecording?: {
+   duration: string;
+   url?: string;
+ };
+}
+
+ /**
+ * Interface for individual person data displayed in the UI
+ */
+ export interface PersonData {
+    id: string;
+    name: string;
+    role: string;
+    callCount: number;
+    messageCount?: number;
+    email?: string;
+}
+
+/**
+ * Interface for stats card data
+ */
+export interface StatsCardData {
+    value: number;
+    label: string;
+    icon: React.ComponentType<any>;
+    isHighlighted?: boolean;
 }
