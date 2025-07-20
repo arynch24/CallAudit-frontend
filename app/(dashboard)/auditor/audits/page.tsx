@@ -1,10 +1,45 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { Play, Flag, Check, X, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Play, Pause, Flag, Check, ChevronRight, X } from 'lucide-react';
+import axios from 'axios';
+import Loader from '@/components/Loader';
+import Error from '@/components/ErrorBox';
 
 /**
- * Type definitions for AI Audit data structures
+ * Interface for the raw API response from the auditor calls endpoint
+ */
+interface AuditorCallsApiResponse {
+  success: boolean;
+  message: string;
+  calls: {
+    id: string;
+    client_number: string;
+    duration: number;
+    tags: string;
+    ai_confidence: number;
+    recording_url: string;
+    summary: string;
+    sentiment_score: number;
+    anomalies: string;
+  }[];
+  call_stats: {
+    audited: number;
+    unaudited: number;
+    flagged: number;
+  };
+}
+
+/**
+ * Interface for approve audit API response
+ */
+interface ApproveAuditResponse {
+  success: boolean;
+  message: string;
+}
+
+/**
+ * Interface for transformed audit data structures
  */
 interface AuditItem {
   id: string;
@@ -12,32 +47,26 @@ interface AuditItem {
   duration: number;
   confidence: number;
   tags: string[];
-  type: 'Voice Assistant' | 'Intermediate' | string;
-  summary?: string;
-  sentiments?: 'Positive' | 'Negative' | 'Neutral';
-  anomalies?: string[];
-  comments?: string;
+  type: string;
+  summary: string;
+  sentiments: 'Positive' | 'Negative' | 'Neutral';
+  anomalies: string;
+  recordingUrl?: string;
   callRecording?: {
     duration: string;
     url?: string;
   };
 }
 
-interface AuditQueueResponse {
-  audits: AuditItem[];
+interface AuditStats {
   totalCompleted: number;
   totalPending: number;
   flaggedCount: number;
 }
 
-interface AuditDetailsResponse extends AuditItem {
-  detailedSummary: string;
-  transcript?: string;
-  analysisDetails?: {
-    keyPoints: string[];
-    riskFactors: string[];
-    recommendations: string[];
-  };
+interface AuditsDashboardData {
+  audits: AuditItem[];
+  stats: AuditStats;
 }
 
 /**
@@ -46,8 +75,6 @@ interface AuditDetailsResponse extends AuditItem {
 interface AiAuditsDashboardProps {
   onAuditSelect?: (auditId: string) => void;
   onAuditApprove?: (auditId: string) => void;
-  onAuditReject?: (auditId: string) => void;
-  onAuditFlag?: (auditId: string, reason: string) => void;
 }
 
 /**
@@ -65,10 +92,31 @@ interface AuditQueueItemProps {
  */
 interface AuditDetailsProps {
   audit: AuditItem | null;
-  onApprove: (auditId: string) => void;
-  onReject: (auditId: string) => void;
-  onFlag: (auditId: string, reason: string) => void;
+  onApprove: (auditId: string, comments?: string, isFlag?: boolean, flagReasons?: string) => void;
+  onApproveLoading: boolean;
 }
+
+/**
+ * Global cache object that persists across component re-renders
+ */
+interface AuditDashboardCache {
+  data: AuditsDashboardData | null;
+  timestamp: number | null;
+  isLoading: boolean;
+  error: string | null;
+}
+
+const auditDashboardCache: AuditDashboardCache = {
+  data: null,
+  timestamp: null,
+  isLoading: false,
+  error: null
+};
+
+/**
+ * Cache duration in milliseconds (2 minutes for more frequent updates)
+ */
+const CACHE_DURATION = 2 * 60 * 1000;
 
 /**
  * Individual audit item component for the queue
@@ -93,7 +141,7 @@ const AuditQueueItem: React.FC<AuditQueueItemProps> = ({
 
   return (
     <div
-      className={`p-4 mb-3 rounded-lg border transition-all  duration-200 cursor-pointer ${isSelected
+      className={`p-4 mb-3 rounded-lg border transition-all duration-200 cursor-pointer ${isSelected
         ? 'border-qc-accent bg-qc-light/15'
         : 'border-qc-primary/40 hover:border-qc-light hover:bg-qc-light/5'
         }`}
@@ -105,7 +153,6 @@ const AuditQueueItem: React.FC<AuditQueueItemProps> = ({
             <h3 className="font-semibold text-qc-primary truncate">
               Call ID: {audit.callId}
             </h3>
-
           </div>
 
           <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600 mb-2">
@@ -130,7 +177,7 @@ const AuditQueueItem: React.FC<AuditQueueItemProps> = ({
           )}
         </div>
 
-        <div className='flex flex-col gap-4 items-end'>
+        <div className="flex flex-col gap-4 items-end">
           <div className={`w-fit px-2 py-1 text-xs rounded-full ${getConfidenceBg(audit.confidence)} ${getConfidenceColor(audit.confidence)}`}>
             AI Confidence: {audit.confidence}%
           </div>
@@ -140,7 +187,7 @@ const AuditQueueItem: React.FC<AuditQueueItemProps> = ({
                 e.stopPropagation();
                 onQuickApprove(audit.id);
               }}
-              className="px-3 py-1 bg-qc-accent text-white rounded-md hover:bg-[--color-qc-dark] transition-colors text-sm"
+              className="px-3 py-1 bg-qc-accent text-white rounded-md hover:bg-qc-dark transition-colors text-sm"
             >
               Quick Approve
             </button>
@@ -166,17 +213,116 @@ const AuditQueueItem: React.FC<AuditQueueItemProps> = ({
 const AuditDetails: React.FC<AuditDetailsProps> = ({
   audit,
   onApprove,
-  onReject,
-  onFlag
+  onApproveLoading
 }) => {
   const [flagReason, setFlagReason] = useState('');
   const [showFlagInput, setShowFlagInput] = useState(false);
+  const [comments, setComments] = useState('');
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [audioDuration, setAudioDuration] = useState(0);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [audioError, setAudioError] = useState('');
 
-  const handleFlag = () => {
-    if (flagReason.trim() && audit) {
-      onFlag(audit.id, flagReason.trim());
-      setFlagReason('');
-      setShowFlagInput(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    setComments('');
+    setFlagReason('');
+    setShowFlagInput(false);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setAudioDuration(0);
+    setAudioError('');
+
+    // Reset audio if audit changes
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  }, [audit]);
+
+  // Initialize audio when audit changes
+  useEffect(() => {
+    if (audit?.recordingUrl) {
+      const audio = new Audio();
+      audioRef.current = audio;
+
+      audio.addEventListener('loadstart', () => {
+        setAudioLoading(true);
+        setAudioError('');
+      });
+
+      audio.addEventListener('loadedmetadata', () => {
+        setAudioDuration(audio.duration);
+        setAudioLoading(false);
+      });
+
+      audio.addEventListener('timeupdate', () => {
+        setCurrentTime(audio.currentTime);
+      });
+
+      audio.addEventListener('ended', () => {
+        setIsPlaying(false);
+        setCurrentTime(0);
+      });
+
+      audio.addEventListener('error', () => {
+        setAudioLoading(false);
+        setAudioError('Failed to load audio');
+        setIsPlaying(false);
+      });
+
+      audio.src = audit.recordingUrl;
+      audio.preload = 'metadata';
+
+      return () => {
+        audio.pause();
+        audio.remove();
+      };
+    }
+  }, [audit?.recordingUrl]);
+
+  const togglePlayPause = () => {
+    if (!audioRef.current) return;
+
+    if (isPlaying) {
+      audioRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      audioRef.current.play()
+        .then(() => {
+          setIsPlaying(true);
+        })
+        .catch((error) => {
+          setAudioError('Failed to play audio');
+          setIsPlaying(false);
+        });
+    }
+  };
+
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current || !audioDuration) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const width = rect.width;
+    const newTime = (clickX / width) * audioDuration;
+
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
+
+  const formatTime = (seconds: number) => {
+    if (isNaN(seconds)) return '0:00';
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = Math.floor(seconds % 60);
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  const handleApproveClick = () => {
+    if (audit) {
+      onApprove(audit.id, comments.trim() || undefined, showFlagInput, flagReason.trim());
     }
   };
 
@@ -216,16 +362,48 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
         {/* Call Recording */}
         <div className="mb-6">
           <h3 className="font-semibold text-qc-primary mb-3">Call Recording</h3>
-          <div className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-            <button className="w-8 h-8 bg-qc-accent text-white rounded-full flex items-center justify-center hover:bg-[--color-qc-dark] transition-colors">
-              <Play className="w-4 h-4" />
-            </button>
-            <div className="flex-1 bg-gray-300 rounded-full h-2">
-              <div className="bg-qc-accent h-2 rounded-full" style={{ width: '0%' }}></div>
+          <div className="p-3 bg-gray-50 rounded-lg">
+            {audioError ? (
+              <div className="text-red-600 text-sm mb-2">{audioError}</div>
+            ) : null}
+
+            <div className="flex items-center gap-3 mb-2">
+              <button
+                onClick={togglePlayPause}
+                disabled={audioLoading || !!audioError || !audit.recordingUrl}
+                className="w-8 h-8 bg-qc-accent text-white rounded-full flex items-center justify-center hover:bg-qc-dark transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                {audioLoading ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                ) : isPlaying ? (
+                  <Pause className="w-4 h-4" />
+                ) : (
+                  <Play className="w-4 h-4" />
+                )}
+              </button>
+
+              <div className="flex-1">
+                <div
+                  className="bg-gray-300 rounded-full h-2 cursor-pointer"
+                  onClick={handleProgressClick}
+                >
+                  <div
+                    className="bg-qc-accent h-2 rounded-full transition-all duration-100"
+                    style={{
+                      width: audioDuration > 0 ? `${(currentTime / audioDuration) * 100}%` : '0%'
+                    }}
+                  ></div>
+                </div>
+              </div>
+
+              <span className="text-sm text-gray-600 min-w-[80px] text-right">
+                {formatTime(currentTime)} / {formatTime(audioDuration || audit.duration * 60)}
+              </span>
             </div>
-            <span className="text-sm text-gray-600">
-              {audit.callRecording?.duration || '8.3 min'}
-            </span>
+
+            {!audit.recordingUrl && (
+              <div className="text-gray-500 text-sm">No recording URL available</div>
+            )}
           </div>
         </div>
 
@@ -234,7 +412,7 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
           <h3 className="font-semibold text-qc-primary mb-3">Summary</h3>
           <div className="bg-gray-50 p-4 rounded-lg">
             <p className="text-sm text-gray-700 leading-relaxed">
-              {audit.summary || 'The customer called to inquire about a billing discrepancy. The agent clarified the charges and offered a 10% discount as a goodwill gesture. The call ended with the customer expressing satisfaction.'}
+              {audit.summary}
             </p>
           </div>
         </div>
@@ -248,7 +426,7 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
               ? 'bg-red-100 text-red-800'
               : 'bg-yellow-100 text-yellow-800'
             }`}>
-            {audit.sentiments || 'Positive'}
+            {audit.sentiments}
           </span>
         </div>
 
@@ -257,7 +435,7 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
           <h3 className="font-semibold text-qc-primary mb-3">Anomalies</h3>
           <div className="bg-gray-50 p-4 rounded-lg">
             <p className="text-sm text-gray-700">
-              {audit.anomalies?.[0] || 'Agent briefly interrupted the customer twice. Slight background noise was present throughout the call.'}
+              {audit.anomalies}
             </p>
           </div>
         </div>
@@ -269,7 +447,8 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
             placeholder="Write comment on audit..."
             className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-qc-accent focus:border-transparent"
             rows={3}
-            defaultValue={audit.comments || ''}
+            value={comments}
+            onChange={(e) => setComments(e.target.value)}
           />
         </div>
 
@@ -283,44 +462,37 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
               <Flag className="w-4 h-4" />
               Flag
             </button>
-            {showFlagInput && (
-              <input
-                type="text"
-                placeholder="write reason for flag..."
-                value={flagReason}
-                onChange={(e) => setFlagReason(e.target.value)}
-                className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-qc-accent focus:border-transparent"
-                onKeyPress={(e) => e.key === 'Enter' && handleFlag()}
-              />
-            )}
           </div>
           {showFlagInput && (
-            <button
-              onClick={handleFlag}
-              disabled={!flagReason.trim()}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-            >
-              Submit Flag
-            </button>
+            <div className="space-y-3">
+              <textarea
+                placeholder="Write reason for flag..."
+                value={flagReason}
+                onChange={(e) => setFlagReason(e.target.value)}
+                className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-qc-accent focus:border-transparent"
+                rows={3}
+              />
+            </div>
           )}
         </div>
       </div>
 
       {/* Action Buttons */}
-      <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-200">
+      <div className="flex pt-4 border-t border-gray-200">
         <button
-          onClick={() => onApprove(audit.id)}
-          className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-qc-accent text-white rounded-lg hover:bg-[--color-qc-dark] transition-colors"
+          onClick={handleApproveClick}
+          disabled={onApproveLoading}
+          className={`
+      flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition-colors
+      ${onApproveLoading ? 'bg-gray-400 cursor-not-allowed' : 'bg-qc-accent hover:bg-qc-dark text-white'}
+    `}
         >
           <Check className="w-4 h-4" />
-          Approve Audit
-        </button>
-        <button
-          onClick={() => onReject(audit.id)}
-          className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-        >
-          <X className="w-4 h-4" />
-          Reject Audit
+          {onApproveLoading ? (
+            <span className="animate-pulse">Approving...</span>
+          ) : (
+            <span>Approve</span>
+          )}
         </button>
       </div>
     </div>
@@ -329,96 +501,124 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
 
 /**
  * Main AI Audits Dashboard Component
- * 
- * This component manages the entire audit review workflow including:
- * - Displaying audit queue with pagination
- * - Handling audit selection and preview
- * - Managing audit actions (approve, reject, flag)
- * - Responsive design for mobile and desktop
  */
 const AiAuditsDashboard: React.FC<AiAuditsDashboardProps> = ({
   onAuditSelect,
-  onAuditApprove,
-  onAuditReject,
-  onAuditFlag
+  onAuditApprove
 }) => {
-  const [audits, setAudits] = useState<AuditItem[]>([]);
+  const [auditsDashboardData, setAuditsDashboardData] = useState<AuditsDashboardData | null>(auditDashboardCache.data);
   const [selectedAudit, setSelectedAudit] = useState<AuditItem | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [stats, setStats] = useState({
-    totalCompleted: 39,
-    totalPending: 80,
-    flaggedCount: 23
-  });
+  const [error, setError] = useState<string>(auditDashboardCache.error || '');
+  const [isLoading, setIsLoading] = useState<boolean>(auditDashboardCache.isLoading);
+  const [isApproveLoading, setIsApproveLoading] = useState<boolean>(false);
 
   /**
-   * Simulates API call to fetch audit queue
+   * Transforms raw API response data into the format expected by dashboard components
    */
-  const fetchAuditQueue = async (): Promise<void> => {
-    setLoading(true);
+  const transformAuditData = (apiData: AuditorCallsApiResponse): AuditsDashboardData => {
+    const { calls, call_stats } = apiData;
+
+    // Transform calls to audit items
+    const transformedAudits: AuditItem[] = calls ? calls.map(call => ({
+      id: call.id,
+      callId: call.client_number,
+      duration: call.duration,
+      confidence: call.ai_confidence,
+      tags: call.tags ? call.tags.split(',').map(tag => tag.trim()).filter(tag => tag) : [],
+      type: (() => {
+        if (!call.tags) return 'General';
+        const tagLower = call.tags.toLowerCase();
+        if (tagLower.includes('voice assistant')) return 'Voice Assistant';
+        if (tagLower.includes('support')) return 'Support';
+        if (tagLower.includes('sales')) return 'Sales';
+        if (tagLower.includes('intermediate')) return 'Intermediate';
+        return 'General';
+      })(),
+      summary: call.summary || 'No summary available',
+      sentiments: call.sentiment_score > 0 ? 'Positive' : call.sentiment_score < 0 ? 'Negative' : 'Neutral',
+      anomalies: call.anomalies || 'No anomalies detected',
+      recordingUrl: call.recording_url,
+      callRecording: {
+        duration: `${call.duration} min`,
+        url: call.recording_url,
+      },
+    })) : [];
+
+    // Transform stats
+    const transformedStats: AuditStats = {
+      totalCompleted: call_stats?.audited || 0,
+      totalPending: call_stats?.unaudited || 0,
+      flaggedCount: call_stats?.flagged || 0,
+    };
+
+    return {
+      audits: transformedAudits,
+      stats: transformedStats
+    };
+  };
+
+  /**
+   * Checks if the cached data is still valid
+   */
+  const isCacheValid = (): boolean => {
+    if (!auditDashboardCache.timestamp) return false;
+    return Date.now() - auditDashboardCache.timestamp < CACHE_DURATION;
+  };
+
+  /**
+   * Fetches audit data from the API with intelligent caching
+   */
+  const fetchAuditData = async (force: boolean = false): Promise<void> => {
+    if (auditDashboardCache.isLoading) return;
+
+    if (!force && auditDashboardCache.data && isCacheValid()) {
+      return;
+    }
+
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      auditDashboardCache.isLoading = true;
+      setIsLoading(true);
+      setError('');
 
-      const mockAudits: AuditItem[] = [
+      const response = await axios.get<AuditorCallsApiResponse>(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auditor/calls`,
         {
-          id: '1',
-          callId: 'PWS01',
-          duration: 12.5,
-          confidence: 50,
-          tags: ['Voice Assistant'],
-          type: 'Voice Assistant',
-          summary: 'Customer inquiry about billing discrepancy with satisfactory resolution.',
-          sentiments: 'Positive'
-        },
-        {
-          id: '2',
-          callId: 'PWS01',
-          duration: 12.5,
-          confidence: 69,
-          tags: ['Intermediate'],
-          type: 'Intermediate',
-          summary: 'Technical support call with complex troubleshooting steps.',
-          sentiments: 'Neutral'
-        },
-        {
-          id: '3',
-          callId: 'PWS01',
-          duration: 12.5,
-          confidence: 79,
-          tags: ['Sales'],
-          type: 'Sales',
-          summary: 'Product inquiry leading to successful conversion.',
-          sentiments: 'Positive'
-        },
-        {
-          id: '4',
-          callId: 'PWS01',
-          duration: 19.2,
-          confidence: 89,
-          tags: ['Support', 'Escalation'],
-          type: 'Support',
-          summary: 'Customer complaint requiring supervisor intervention.',
-          sentiments: 'Negative'
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'application/json',
+          },
         }
-      ];
+      );
+      const transformedData = transformAuditData(response.data);
 
-      setAudits(mockAudits);
-      if (mockAudits.length > 0) {
-        setSelectedAudit(mockAudits[0]);
+      auditDashboardCache.data = transformedData;
+      auditDashboardCache.timestamp = Date.now();
+      auditDashboardCache.error = null;
+
+      setAuditsDashboardData(transformedData);
+
+      // Auto-select first audit if available and no audit is currently selected
+      if (transformedData.audits.length > 0 && !selectedAudit) {
+        setSelectedAudit(transformedData.audits[0]);
       }
-    } catch (error) {
-      console.error('Error fetching audit queue:', error);
+
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.message || err.message || 'Failed to fetch audit data';
+      auditDashboardCache.error = errorMsg;
+      setError(errorMsg);
     } finally {
-      setLoading(false);
+      auditDashboardCache.isLoading = false;
+      setIsLoading(false);
     }
   };
 
   /**
    * Handles audit selection
    */
-  const handleAuditSelect = (auditId: string): void => {
-    const audit = audits.find(a => a.id === auditId);
+  const handleAuditSelect = (auditId: string) => {
+    if (!auditsDashboardData) return;
+
+    const audit = auditsDashboardData.audits.find(a => a.id === auditId);
     if (audit) {
       setSelectedAudit(audit);
       onAuditSelect?.(auditId);
@@ -426,125 +626,161 @@ const AiAuditsDashboard: React.FC<AiAuditsDashboardProps> = ({
   };
 
   /**
-   * Handles quick approval of an audit
+   * Unified handler for both approve and flag operations
    */
-  const handleQuickApprove = (auditId: string): void => {
-    // Update audit status locally
-    setAudits(prev => prev.filter(a => a.id !== auditId));
+  const handleApprove = async (auditId: string, comments?: string, isFlag: boolean = false, flagReasons: string = '') => {
+    try {
+      const requestData = {
+        call_id: auditId,
+        comments: comments || '',
+        is_flag: isFlag,
+        flag_reasons: flagReasons,
+      };
+      setIsApproveLoading(true);
 
-    // If this was the selected audit, select the next one
-    if (selectedAudit?.id === auditId) {
-      const remainingAudits = audits.filter(a => a.id !== auditId);
-      setSelectedAudit(remainingAudits.length > 0 ? remainingAudits[0] : null);
+      const response = await axios.post<ApproveAuditResponse>(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auditor/approve-audit`,
+        requestData,
+        {
+          withCredentials: true,
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+        }
+      );
+
+      // Update local state
+      if (auditsDashboardData) {
+        const updatedAudits = auditsDashboardData.audits.filter(a => a.id !== auditId);
+        const updatedStats = {
+          ...auditsDashboardData.stats,
+          totalCompleted: auditsDashboardData.stats.totalCompleted + 1,
+          totalPending: Math.max(0, auditsDashboardData.stats.totalPending - 1),
+          flaggedCount: isFlag
+            ? auditsDashboardData.stats.flaggedCount + 1
+            : auditsDashboardData.stats.flaggedCount
+        };
+
+        const updatedData = {
+          audits: updatedAudits,
+          stats: updatedStats
+        };
+
+        setAuditsDashboardData(updatedData);
+        auditDashboardCache.data = updatedData;
+
+        // Select next audit if current one was processed
+        if (selectedAudit?.id === auditId) {
+          setSelectedAudit(updatedAudits.length > 0 ? updatedAudits[0] : null);
+        }
+      }
+
+      onAuditApprove?.(auditId);
+
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.message || err.message || `Failed to ${isFlag ? 'flag' : 'approve'} audit`;
+      setError(errorMsg);
+    } finally {
+      setIsApproveLoading(false);
     }
-
-    onAuditApprove?.(auditId);
   };
 
-  /**
-   * Handles audit approval
-   */
-  const handleApprove = (auditId: string): void => {
-    handleQuickApprove(auditId);
-  };
-
-  /**
-   * Handles audit rejection
-   */
-  const handleReject = (auditId: string): void => {
-    setAudits(prev => prev.filter(a => a.id !== auditId));
-
-    if (selectedAudit?.id === auditId) {
-      const remainingAudits = audits.filter(a => a.id !== auditId);
-      setSelectedAudit(remainingAudits.length > 0 ? remainingAudits[0] : null);
-    }
-
-    onAuditReject?.(auditId);
-  };
-
-  /**
-   * Handles audit flagging
-   */
-  const handleFlag = (auditId: string, reason: string): void => {
-    setStats(prev => ({ ...prev, flaggedCount: prev.flaggedCount + 1 }));
-    onAuditFlag?.(auditId, reason);
-  };
-
-  // Fetch data on component mount
   useEffect(() => {
-    fetchAuditQueue();
+    if (auditDashboardCache.data && isCacheValid()) {
+      setAuditsDashboardData(auditDashboardCache.data);
+      setError(auditDashboardCache.error || '');
+      setIsLoading(false);
+
+      // Auto-select first audit if available
+      if (auditDashboardCache.data.audits.length > 0 && !selectedAudit) {
+        setSelectedAudit(auditDashboardCache.data.audits[0]);
+      }
+    } else {
+      fetchAuditData();
+    }
   }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-qc-accent border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading audits...</p>
-        </div>
-      </div>
-    );
+  // Show loading spinner only if we don't have any data to display
+  if (isLoading && !auditsDashboardData) {
+    return <Loader text='Loading AI Audits Dashboard' />;
+  }
+
+  // Show error page only if we have an error and no cached data to fall back to
+  if (error && !auditsDashboardData) {
+    return <Error message={error} onRetry={() => fetchAuditData(true)} />;
   }
 
   return (
-    <div className="min-h-scree p-4">
+    <div className="min-h-screen p-4">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="w-fit mb-4">
-          <div className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-800 rounded-lg">
-            <span className="text-sm font-medium">Flagged audits</span>
-            <span className="bg-red-200 text-red-900 px-2 py-1 rounded text-sm font-bold">
-              {stats.flaggedCount}
-            </span>
-          </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-          {/* Left Panel - Audit Queue */}
-          <div className="lg:col-span-3">
-            <div className="bg-qc-light/10 rounded-lg p-4 sm:p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
-                <h2 className="text-xl font-semibold text-qc-primary mb-2 sm:mb-0">
-                  AI Audits Queue
-                </h2>
-                <span className="text-sm text-gray-600">
-                  <span className="font-semibold">{stats.totalCompleted}</span>/
-                  <span className="font-semibold">{stats.totalPending}</span>
-                  <span className="ml-1">completed vs pending</span>
+        {auditsDashboardData && (
+          <>
+            {/* Header */}
+            <div className="w-fit mb-4">
+              <div className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-800 rounded-lg">
+                <span className="text-sm font-medium">Flagged audits</span>
+                <span className="bg-red-200 text-red-900 px-2 py-1 rounded text-sm font-bold">
+                  {auditsDashboardData.stats.flaggedCount}
                 </span>
               </div>
+            </div>
 
-              <div className="space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
-                {audits.map((audit) => (
-                  <AuditQueueItem
-                    key={audit.id}
-                    audit={audit}
-                    isSelected={selectedAudit?.id === audit.id}
-                    onSelect={handleAuditSelect}
-                    onQuickApprove={handleQuickApprove}
-                  />
-                ))}
-
-                {audits.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>No audits in queue</p>
+            {/* Main Content */}
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+              {/* Left Panel - Audit Queue */}
+              <div className="lg:col-span-3">
+                <div className="bg-qc-light/10 rounded-lg p-4 sm:p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4">
+                    <h2 className="text-xl font-semibold text-qc-primary mb-2 sm:mb-0">
+                      AI Audits Queue
+                    </h2>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">
+                        <span className="font-semibold">{auditsDashboardData.stats.totalCompleted}</span>/
+                        <span className="font-semibold">{auditsDashboardData.stats.totalPending}</span>
+                        <span className="ml-1">completed vs pending</span>
+                      </span>
+                    </div>
                   </div>
-                )}
+
+                  <div className="space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
+                    {auditsDashboardData.audits.map((audit) => (
+                      <AuditQueueItem
+                        key={audit.id}
+                        audit={audit}
+                        isSelected={selectedAudit?.id === audit.id}
+                        onSelect={handleAuditSelect}
+                        onQuickApprove={handleApprove}
+                      />
+                    ))}
+
+                    {auditsDashboardData.audits.length === 0 && (
+                      <div className="text-center py-8 text-gray-500">
+                        <p>No audits in queue</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Panel - Audit Details */}
+              <div className="lg:col-span-2">
+                <AuditDetails
+                  audit={selectedAudit}
+                  onApprove={handleApprove}
+                  onApproveLoading={isApproveLoading}
+                />
               </div>
             </div>
-          </div>
 
-          {/* Right Panel - Audit Details */}
-          <div className="lg:col-span-2">
-            <AuditDetails
-              audit={selectedAudit}
-              onApprove={handleApprove}
-              onReject={handleReject}
-              onFlag={handleFlag}
-            />
-          </div>
-        </div>
+            {/* Warning message if there's an error but we have cached data to show */}
+            {error && auditsDashboardData && (
+              <div className="mt-4 p-4 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded">
+                Warning: Failed to refresh data. Showing cached data. Error: {error}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

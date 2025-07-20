@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
+import axios from 'axios';
 
 
 // Define the structure for navigation items
@@ -90,10 +91,18 @@ const QCAuditSidebar: React.FC = () => {
     /**
      * Handle logout functionality
      */
-    const handleLogout = () => {
+    const handleLogout = async () => {
         // Add logout logic here
-        console.log('Logging out...');
-        router.push('/signin');
+        try {
+            await axios.get((`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auth/logout`), {
+                withCredentials: true,
+            });
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                console.error('Logout failed:', error.response?.data || error.message);
+            }
+        }
+        router.push('/');
     };
 
     /**

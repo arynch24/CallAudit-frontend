@@ -4,6 +4,7 @@ import { createContext, useContext, useState, Dispatch, SetStateAction, useEffec
 import axios from 'axios';
 import { useRouter } from 'next/navigation';
 import { UserProfile } from '@/types/dashboard'
+import { usePathname } from 'next/navigation';
 
 type AuthContextType = {
     success: boolean;
@@ -18,6 +19,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const [user, setUser] = useState<UserProfile | null>(null);
     const [success, setSuccess] = useState<boolean>(false);
     const router = useRouter();
+    const pathname = usePathname();
 
     useEffect(() => {
         const fetchUser = async () => {
@@ -27,6 +29,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 });
                 setUser(res.data.user);
                 setSuccess(res.data.success);
+                if (res.data.user.role === 'auditor' && pathname === '/manager') {
+                    router.push('/');
+                }
+                if (res.data.user.role === 'manager' && pathname === '/auditor') {
+                    router.push('/');
+                }
             } catch (err) {
                 setUser(null);
                 router.push('/')
