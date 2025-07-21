@@ -5,7 +5,6 @@ import { Search } from 'lucide-react';
 interface SearchBarProps {
     onSearch: (query: string) => void;
     placeholder?: string;
-    isLoading?: boolean;
 }
 
 /**
@@ -14,7 +13,6 @@ interface SearchBarProps {
 const SearchBar: React.FC<SearchBarProps> = ({
     onSearch,
     placeholder = "Search counsellor or auditor by name...",
-    isLoading = false
 }) => {
     const [searchQuery, setSearchQuery] = useState('');
 
@@ -40,11 +38,9 @@ const SearchBar: React.FC<SearchBarProps> = ({
                 value={searchQuery}
                 onChange={handleInputChange}
                 placeholder={placeholder}
-                disabled={isLoading}
                 className={`
-                    w-full pl-12 pr-16 py-4 rounded-xl border-0 
+                    w-full pl-12 pr-40 py-4 rounded-xl border-0 
                  shadow-sm text-gray-900 bg-qc-dark/10 focus:outline-none focus:ring-1 focus:ring-qc-accent transition-all duration-200 text-base
-                    ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}
                 `}
             />
             {searchQuery && (

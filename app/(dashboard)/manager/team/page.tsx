@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Phone, Users, UserCheck } from 'lucide-react';
+import { Phone, Users, UserCheck, Plus } from 'lucide-react';
 import axios from 'axios';
 import Loader from '@/components/Loader';
 import Error from '@/components/ErrorBox';
@@ -9,6 +9,7 @@ import PersonList from '@/components/manager/PersonList';
 import { PersonData, StatsCardData } from '@/types/dashboard';
 import StatsCard from '@/components/manager/StatCard';
 import SearchBar from '@/components/manager/SearchBar';
+import AddMember from '@/components/manager/AddMember';
 
 /**
  * API Response interface for auditors endpoint
@@ -259,6 +260,7 @@ const ManagerTeamDashboard: React.FC = () => {
     const [displayCounsellors, setDisplayCounsellors] = useState<PersonData[]>(dashboardCache.data?.counsellors || []);
     const [isLoading, setIsLoading] = useState<boolean>(dashboardCache.isLoading);
     const [error, setError] = useState<string>(dashboardCache.error || '');
+    const [openAddMemberModal, setOpenAddMemberModal] = useState<boolean>(false);
 
     /**
      * Fetches dashboard data with intelligent caching
@@ -298,7 +300,7 @@ const ManagerTeamDashboard: React.FC = () => {
     const handleSearch = (query: string) => {
         if (!dashboardData) return;
 
-        // Instantly filter the data without API calls
+        // Instantly filter the data
         const filteredData = filterPeople(query, dashboardData);
 
         setDisplayAuditors(filteredData.auditors);
@@ -357,8 +359,14 @@ const ManagerTeamDashboard: React.FC = () => {
                                 ))}
                             </div>
 
-                            {/* Search Bar */}
-                            <SearchBar onSearch={handleSearch} isLoading={false} />
+                            <div className='flex justify-between items-center gap-4'>
+                                {/* Search Bar */}
+                                <SearchBar onSearch={handleSearch} />
+                                {/* Add Button */}
+                                <div className='relative -top-4 bg-gray-300 p-2 rounded-full text-qc-dark/80 hover:text-qc-dark hover:bg-gray-400 transition-all duration-200 cursor-pointer'>
+                                <Plus size={36} onClick={() => setOpenAddMemberModal(true)} />
+                                </div>
+                            </div>
 
                             {/* Content Grid */}
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
@@ -382,6 +390,14 @@ const ManagerTeamDashboard: React.FC = () => {
                             </div>
                         </>
                     )}
+
+                    {
+                        openAddMemberModal && (
+                            <AddMember
+                                onCancel={() => setOpenAddMemberModal(false)}
+                            />
+                        )
+                    }
 
                     {/* Warning message if there's an error but we have cached data to show */}
                     {error && dashboardData && (

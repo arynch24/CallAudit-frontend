@@ -115,7 +115,7 @@ const ManagerDashboard: React.FC = () => {
         const { total_assigned_leads, total_audited_calls, flagged_calls, latest_flagged_audit, last_7_days_data } = apiData;
 
         // Calculate pending audits (difference between assigned and audited)
-        const pending_audits = total_audited_calls - total_assigned_leads;
+        const pending_audits = total_assigned_leads - total_audited_calls;
 
         // Create stats array for the stat cards
         const stats: DashboardStat[] = [
