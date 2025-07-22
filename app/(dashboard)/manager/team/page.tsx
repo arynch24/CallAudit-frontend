@@ -201,8 +201,7 @@ async function fetchDashboardData(force: boolean = false): Promise<DashboardData
 
         return dashboardData;
     } catch (error: any) {
-        // Handle API errors
-        const errorMsg = error.message || 'Failed to fetch dashboard data';
+        const errorMsg = error.response.data.message || 'Failed to fetch dashboard data';
         dashboardCache.error = errorMsg;
         throw error;
     } finally {

@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import Loader from '@/components/Loader';
 import Error from '@/components/ErrorBox';
-import { CheckLine } from 'lucide-react';
+import { X } from 'lucide-react';
 
 /**
  * Interface for individual flagged review data structure
@@ -150,7 +150,7 @@ const ReviewTableRow: React.FC<{ review: FlaggedReview, onUnflagReview: (id: str
     <td
       onClick={() => onUnflagReview(review.id)}
       className="w-fit flex items-center ml-4 mt-2 justify-center text-qc-accent cursor-pointer hover:text-qc-primary hover:bg-qc-dark/10 rounded-sm p-1 transition-colors" >
-      <CheckLine />
+      <X />
     </td>
   </tr>
 );
@@ -190,7 +190,7 @@ const MobileReviewCard: React.FC<{ review: FlaggedReview, onUnflagReview: (id: s
         <button
           onClick={() => onUnflagReview(review.id)}
           className="w-fit flex items-center justify-center text-qc-accent cursor-pointer hover:text-qc-primary hover:bg-qc-dark/10 rounded-sm p-1 transition-colors">
-          <CheckLine />
+          <X />
         </button>
       </div>
     </div>
@@ -258,7 +258,7 @@ const FlaggedReviewsComponent: React.FC = () => {
 
       // Make API call to fetch flagged reviews data
       const response = await axios.get<FlaggedAuditsResponse>(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/manager/flagged-audits`,
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auditor/flagged-audits`,
         {
           withCredentials: true,
         }
@@ -289,11 +289,11 @@ const FlaggedReviewsComponent: React.FC = () => {
   const handleUnflagReview = async (reviewId: string) => {
     try {
       await axios.get(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/manager/unflag?audit_id=${reviewId}`,
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auditor/unflag?audit_id=${reviewId}`,
         { withCredentials: true }
       );
 
-      // Optionally, refetch data to update the list
+      //refetch data to update the list
       await fetchFlaggedReviewsData(true);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to unflag review');
