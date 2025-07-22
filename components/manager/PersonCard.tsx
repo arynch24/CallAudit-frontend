@@ -46,12 +46,12 @@ const PersonCard: React.FC<PersonCardProps> = ({ person, showMessages = false, o
         setIsLoading(false);
     };
 
-    const handleConfirmAction = async () => {
+    const handleDeactivate = async () => {
         setIsLoading(true);
         setError(null);
 
         try {
-            const response = await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/manager/deactivate`, {
+            await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/manager/deactivate`, {
                 role: role,
                 counsellor_id: id,
                 auditor_id: id,
@@ -69,8 +69,37 @@ const PersonCard: React.FC<PersonCardProps> = ({ person, showMessages = false, o
             // Handle different types of errors
             if (err.response?.data?.message) {
                 setError(err.response.data.message);
-            } else if (err.message) {
-                setError(err.message);
+            } else {
+                setError('An unexpected error occurred. Please try again.');
+            }
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleActivate = async () => {
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/manager/activate`, {
+                role: role,
+                counsellor_id: id,
+                auditor_id: id,
+            }, {
+                withCredentials: true,
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+            });
+
+            handleCloseDialog();
+            onRefresh?.();
+
+        } catch (err: any) {
+            // Handle different types of errors
+            if (err.response?.data?.message) {
+                setError(err.response.data.message);
             } else {
                 setError('An unexpected error occurred. Please try again.');
             }
@@ -205,7 +234,7 @@ const PersonCard: React.FC<PersonCardProps> = ({ person, showMessages = false, o
                                 Cancel
                             </button>
                             <button
-                                onClick={handleConfirmAction}
+                                onClick={isActive ? handleDeactivate : handleActivate}
                                 disabled={isLoading}
                                 className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${isActive
                                     ? 'bg-red-600 hover:bg-red-700 disabled:bg-red-400'

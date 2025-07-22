@@ -65,10 +65,16 @@ const QCAuditSidebar: React.FC = () => {
             navigation: '/auditor'
         },
         {
-            id: 'aidits',
-            label: 'Audits',
+            id: 'audits',
+            label: 'AI Audits',
             icon: <FileCode2 size={20} />,
             navigation: '/auditor/audits',
+        },
+        {
+            id:'flagged-audits',
+            label: 'Flagged Audits',
+            icon: <Flag size={20} />,
+            navigation: '/auditor/flagged-audits',
         },
         {
             id: 'help',
