@@ -4,20 +4,9 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import Loader from '@/components/Loader';
 import Error from '@/components/ErrorBox';
-import { X, Loader2 } from 'lucide-react';
-
-/**
- * Interface for individual flagged review data structure
- * Represents the processed data format used by the UI components
- */
-interface FlaggedReview {
-  id: string;
-  callNumber: string;
-  counsellor: string;
-  auditorComment: string;
-  linkedAuditor: string;
-  flagReason: string;
-}
+import MobileReviewCard from '@/components/MobileReviewCard';
+import { FlaggedReview } from '@/types/dashboard';
+import ReviewTableRow from '@/components/ReviewTableRow';
 
 /**
  * Interface for the processed flagged reviews data
@@ -102,119 +91,6 @@ const transformedApiResponse = (apiData: FlaggedAuditsResponse): FlaggedReviewsD
     reviews
   };
 };
-
-/**
- * Flag Badge Component
- * Displays a colored badge with the flag reason
- * 
- * @param {Object} props - Component props
- * @param {string} props.flagReason - The reason for flagging the review
- * @returns {JSX.Element} The rendered flag badge
- */
-const FlagBadge: React.FC<{ flagReason: string }> = ({ flagReason }) => {
-  return (
-    <div className="flex items-center">
-      <div className="w-2 h-2 rounded-full bg-orange-500 mr-2"></div>
-      <span className="text-sm font-medium text-qc-primary">
-        {flagReason}
-      </span>
-    </div>
-  );
-};
-
-/**
- * Table Row Component for Desktop View
- * Renders a single flagged review as a table row
- * 
- * @param {Object} props - Component props
- * @param {FlaggedReview} props.review - The review data to display
- * @param {Function} props.onUnflagReview - Function to handle unflagging
- * @param {boolean} props.isUnflagging - Whether this review is currently being unflagged
- * @returns {JSX.Element} The rendered table row
- */
-const ReviewTableRow: React.FC<{
-  review: FlaggedReview,
-  onUnflagReview: (id: string) => void,
-  isUnflagging: boolean
-}> = ({ review, onUnflagReview, isUnflagging }) => (
-  <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
-    <td className="px-4 py-4 text-sm font-medium text-qc-primary">
-      {review.callNumber}
-    </td>
-    <td className="px-4 py-4 text-sm text-qc-primary">
-      {review.counsellor}
-    </td>
-    <td className="px-4 py-4 text-sm text-qc-primary">
-      {review.auditorComment}
-    </td>
-    <td className="px-4 py-4">
-      <FlagBadge flagReason={review.flagReason} />
-    </td>
-    <td className="px-4 py-4">
-      <button
-        onClick={() => onUnflagReview(review.id)}
-        disabled={isUnflagging}
-        className="w-fit flex items-center justify-center text-qc-accent cursor-pointer hover:text-qc-primary hover:bg-qc-dark/10 rounded-sm p-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {isUnflagging ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <X className="h-4 w-4" />
-        )}
-      </button>
-    </td>
-  </tr>
-);
-
-/**
- * Mobile Card Component for Mobile View
- * Renders a single flagged review as a card for mobile devices
- * 
- * @param {Object} props - Component props
- * @param {FlaggedReview} props.review - The review data to display
- * @param {Function} props.onUnflagReview - Function to handle unflagging
- * @param {boolean} props.isUnflagging - Whether this review is currently being unflagged
- * @returns {JSX.Element} The rendered mobile card
- */
-const MobileReviewCard: React.FC<{
-  review: FlaggedReview,
-  onUnflagReview: (id: string) => void,
-  isUnflagging: boolean
-}> = ({ review, onUnflagReview, isUnflagging }) => (
-  <div className="border rounded-lg p-4 mb-4 shadow-sm bg-white">
-    <div className="flex justify-between items-start mb-2">
-      <span className="font-medium text-sm text-qc-primary">
-        {review.callNumber}
-      </span>
-      <FlagBadge flagReason={review.flagReason} />
-    </div>
-
-    <div className="space-y-2 text-sm">
-      <div className="flex justify-between">
-        <span className="text-qc-accent">Counsellor:</span>
-        <span className="text-qc-primary">{review.counsellor}</span>
-      </div>
-      <div className="flex justify-between">
-        <span className="text-qc-accent">Auditor Comment:</span>
-        <span className="text-qc-primary">{review.auditorComment}</span>
-      </div>
-      <div className="flex justify-between mt-4">
-        <span className="text-qc-accent">Action:</span>
-        <button
-          onClick={() => onUnflagReview(review.id)}
-          disabled={isUnflagging}
-          className="w-fit flex items-center justify-center text-qc-accent cursor-pointer hover:text-qc-primary hover:bg-qc-dark/10 rounded-sm p-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isUnflagging ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <X className="h-4 w-4" />
-          )}
-        </button>
-      </div>
-    </div>
-  </div>
-);
 
 /**
  * Flagged Reviews Component

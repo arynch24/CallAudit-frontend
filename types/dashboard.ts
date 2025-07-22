@@ -144,3 +144,16 @@ export interface StatsCardData {
     icon: React.ComponentType<any>;
     isHighlighted?: boolean;
 }
+
+/**
+ * Interface for individual flagged review data structure
+ * Represents the processed data format used by the UI components
+ */
+export interface FlaggedReview {
+    id: string;
+    callNumber: string;
+    counsellor: string;
+    auditorComment: string;
+    linkedAuditor: string;
+    flagReason: string;
+  }
