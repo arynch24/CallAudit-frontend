@@ -132,6 +132,7 @@ interface AuditItem {
     callCount: number;
     messageCount?: number;
     email?: string;
+    isActive: boolean;
 }
 
 /**

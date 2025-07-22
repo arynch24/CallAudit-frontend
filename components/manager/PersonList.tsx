@@ -9,6 +9,7 @@ interface PersonListProps {
     totalCount: number;
     showMessages?: boolean;
     isLoading?: boolean;
+    onRefresh?: () => void;
 }
 
 /**
@@ -19,7 +20,8 @@ const PersonList: React.FC<PersonListProps> = ({
     people,
     totalCount,
     showMessages = false,
-    isLoading = false
+    isLoading = false,
+    onRefresh = () => {},
 }) => {
     return (
         <div className="rounded-xl p-6 bg-qc-dark/10">
@@ -33,9 +35,6 @@ const PersonList: React.FC<PersonListProps> = ({
                         {totalCount}
                     </span>
                 </div>
-                <button className="text-sm font-medium text-qc-dark hover:text-blue-700 transition-colors underline">
-                    View more
-                </button>
             </div>
 
             {/* Loading state */}
@@ -68,6 +67,7 @@ const PersonList: React.FC<PersonListProps> = ({
                                 key={person.id}
                                 person={person}
                                 showMessages={showMessages}
+                                onRefresh={onRefresh}
                             />
                         ))
                     ) : (

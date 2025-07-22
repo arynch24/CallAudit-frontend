@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import axios from 'axios';
-import { on } from 'events';
+import { useDashboard } from '@/context/DashboardContext';
+import { useState } from 'react';
 
 interface FormData {
     name: string;
@@ -12,71 +13,57 @@ interface FormData {
 
 interface AddMemberProps {
     onCancel?: () => void;
+    onRefresh?: () => void;
 }
 
-const AddMember: React.FC<AddMemberProps> = ({ onCancel }) => {
-    const [formData, setFormData] = useState<FormData>({
-        name: '',
-        email: '',
-        mobile: '',
-        position: '',
-        auditorId: ''
-    });
-
+const AddMember: React.FC<AddMemberProps> = ({ onCancel, onRefresh }) => {
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const { setOpenAddMemberModal } = useDashboard();
 
     const positions = [
         'Auditor',
         'Counsellor'
     ];
 
-    const handleInputChange = (field: keyof FormData, value: string) => {
-        setFormData(prev => ({
-            ...prev,
-            [field]: value
-        }));
-    };
-
-    const resetForm = () => {
-        setFormData({
+    const {
+        register,
+        handleSubmit,
+        reset,
+        formState: { errors, isValid }
+    } = useForm<FormData>({
+        mode: 'onChange',
+        defaultValues: {
             name: '',
             email: '',
             mobile: '',
             position: '',
             auditorId: ''
-        });
-    };
-
-    const handleAdd = async () => {
-        if (!formData.name || !formData.email || !formData.mobile || !formData.position) {
-            setErrorMessage('Please fill in all required fields');
-            return;
         }
+    });
 
+    const onSubmit = async (data: FormData) => {
         setIsSubmitting(true);
+        setErrorMessage(null);
 
         try {
-            const payload = {
-                name: formData.name.trim(),
-                email: formData.email.trim(),
-                phone: formData.mobile.trim(),
-                role: formData.position.toLowerCase(),
-                ...(formData.auditorId && { auditor_id: formData.auditorId.trim() })
-            };
+            const formData = new URLSearchParams();
+            formData.append("name", data.name);
+            formData.append("email", data.email);
+            formData.append("phone", data.mobile);
+            formData.append("role", data.position.toLowerCase());
+            if (data.auditorId) formData.append("auditor_id", data.auditorId);
 
-            const response = await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/manager/add`,
-                JSON.stringify(payload)
-                , {
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    withCredentials: true
-                });
+            await axios.post(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/manager/add`, formData, {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                withCredentials: true,
+            });
 
-            const result = response.data;
-            setErrorMessage(null);
-            resetForm();
+            reset();
+            onRefresh?.();
+            setOpenAddMemberModal(false);
 
         } catch (error) {
             if (axios.isAxiosError(error)) {
@@ -91,18 +78,16 @@ const AddMember: React.FC<AddMemberProps> = ({ onCancel }) => {
     };
 
     const handleCancel = () => {
-        resetForm();
+        reset();
         onCancel?.();
     };
-
-    const isFormValid = formData.name && formData.email && formData.mobile && formData.position;
 
     return (
         <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/30 backdrop-blur-sm">
             <div className="w-md mx-auto p-8 bg-gray-50 rounded-lg border border-gray-200">
                 <h1 className="text-3xl font-semibold text-gray-800 mb-8">Add Member</h1>
 
-                <div className="space-y-2">
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-2">
                     {/* Name Field */}
                     <div>
                         <label htmlFor="name" className="block font-medium text-gray-700 mb-3">
@@ -111,12 +96,24 @@ const AddMember: React.FC<AddMemberProps> = ({ onCancel }) => {
                         <input
                             id="name"
                             type="text"
-                            value={formData.name}
-                            onChange={(e) => handleInputChange('name', e.target.value)}
+                            {...register('name', {
+                                required: 'Name is required',
+                                minLength: {
+                                    value: 2,
+                                    message: 'Name must be at least 2 characters long'
+                                },
+                                pattern: {
+                                    value: /^[A-Za-z\s]+$/,
+                                    message: 'Name can only contain letters and spaces'
+                                }
+                            })}
                             placeholder="Enter the name..."
-                            required
-                            className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg bg-white placeholder-gray-500 focus:outline-none"
+                            className={`w-full px-4 py-3 text-sm border rounded-lg bg-white placeholder-gray-500 focus:outline-none ${errors.name ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+                                }`}
                         />
+                        {errors.name && (
+                            <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
+                        )}
                     </div>
 
                     {/* Email Field */}
@@ -127,12 +124,20 @@ const AddMember: React.FC<AddMemberProps> = ({ onCancel }) => {
                         <input
                             id="email"
                             type="email"
-                            value={formData.email}
-                            onChange={(e) => handleInputChange('email', e.target.value)}
+                            {...register('email', {
+                                required: 'Email is required',
+                                pattern: {
+                                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                                    message: 'Please enter a valid email address'
+                                }
+                            })}
                             placeholder="Enter the email..."
-                            required
-                            className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg bg-white placeholder-gray-500 focus:outline-none"
+                            className={`w-full px-4 py-3 text-sm border rounded-lg bg-white placeholder-gray-500 focus:outline-none ${errors.email ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+                                }`}
                         />
+                        {errors.email && (
+                            <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
+                        )}
                     </div>
 
                     {/* Mobile Number Field */}
@@ -143,12 +148,20 @@ const AddMember: React.FC<AddMemberProps> = ({ onCancel }) => {
                         <input
                             id="mobile"
                             type="tel"
-                            value={formData.mobile}
-                            onChange={(e) => handleInputChange('mobile', e.target.value)}
+                            {...register('mobile', {
+                                required: 'Mobile number is required',
+                                pattern: {
+                                    value: /^[0-9]{10}$/,
+                                    message: 'Please enter a valid 10-digit mobile number'
+                                }
+                            })}
                             placeholder="Enter the mobile number..."
-                            required
-                            className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg bg-white placeholder-gray-500 focus:outline-none"
+                            className={`w-full px-4 py-3 text-sm border rounded-lg bg-white placeholder-gray-500 focus:outline-none ${errors.mobile ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+                                }`}
                         />
+                        {errors.mobile && (
+                            <p className="mt-1 text-sm text-red-600">{errors.mobile.message}</p>
+                        )}
                     </div>
 
                     {/* Position Field */}
@@ -158,10 +171,11 @@ const AddMember: React.FC<AddMemberProps> = ({ onCancel }) => {
                         </label>
                         <select
                             id="position"
-                            value={formData.position}
-                            onChange={(e) => handleInputChange('position', e.target.value)}
-                            required
-                            className="w-48 px-4 py-3 text-sm border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none appearance-none cursor-pointer"
+                            {...register('position', {
+                                required: 'Position is required'
+                            })}
+                            className={`w-48 px-4 py-3 text-sm border rounded-lg bg-white text-gray-700 focus:outline-none appearance-none cursor-pointer ${errors.position ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+                                }`}
                         >
                             <option value="">Select</option>
                             {positions.map((pos) => (
@@ -170,6 +184,9 @@ const AddMember: React.FC<AddMemberProps> = ({ onCancel }) => {
                                 </option>
                             ))}
                         </select>
+                        {errors.position && (
+                            <p className="mt-1 text-sm text-red-600">{errors.position.message}</p>
+                        )}
                     </div>
 
                     {/* Auditor ID Field */}
@@ -180,23 +197,26 @@ const AddMember: React.FC<AddMemberProps> = ({ onCancel }) => {
                         <input
                             id="auditorId"
                             type="text"
-                            value={formData.auditorId}
-                            onChange={(e) => handleInputChange('auditorId', e.target.value)}
                             placeholder="Enter the auditor ID..."
-                            className="w-full px-4 py-3 text-sm border border-gray-300 rounded-lg bg-white placeholder-gray-500 focus:outline-none"
+                            className={`w-full px-4 py-3 text-sm border rounded-lg bg-white placeholder-gray-500 focus:outline-none ${errors.auditorId ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+                                }`}
                         />
+                        {errors.auditorId && (
+                            <p className="mt-1 text-sm text-red-600">{errors.auditorId.message}</p>
+                        )}
                     </div>
 
                     {/* Error Message */}
                     {errorMessage && (
-                        <div className="mt-4 text-red-600 text-sm">
-                            {errorMessage}
+                        <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                            <p className="text-red-600 text-sm">{errorMessage}</p>
                         </div>
                     )}
 
                     {/* Action Buttons */}
                     <div className="flex gap-4 pt-4">
                         <button
+                            type="button"
                             onClick={handleCancel}
                             disabled={isSubmitting}
                             className="px-8 py-3 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -204,14 +224,14 @@ const AddMember: React.FC<AddMemberProps> = ({ onCancel }) => {
                             Cancel
                         </button>
                         <button
-                            onClick={handleAdd}
-                            disabled={!isFormValid || isSubmitting}
+                            type="submit"
+                            disabled={!isValid || isSubmitting}
                             className="px-8 py-3 text-sm font-medium text-white bg-gray-600 border border-gray-600 rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:border-transparent transition-colors disabled:bg-gray-300 disabled:border-gray-300 disabled:cursor-not-allowed"
                         >
                             {isSubmitting ? 'Adding...' : 'Add'}
                         </button>
                     </div>
-                </div>
+                </form>
             </div>
         </div>
     );

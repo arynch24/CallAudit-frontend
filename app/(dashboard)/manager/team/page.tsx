@@ -10,6 +10,7 @@ import { PersonData, StatsCardData } from '@/types/dashboard';
 import StatsCard from '@/components/manager/StatCard';
 import SearchBar from '@/components/manager/SearchBar';
 import AddMember from '@/components/manager/AddMember';
+import { useDashboard } from '@/context/DashboardContext';
 
 /**
  * API Response interface for auditors endpoint
@@ -24,6 +25,7 @@ interface AuditorsApiResponse {
         name: string;
         total_assigned_leads: number;
         total_audited_leads: number;
+        is_active: boolean;
     }[];
 }
 
@@ -40,6 +42,7 @@ interface CounsellorsApiResponse {
         name: string;
         email: string;
         total_calls: number;
+        is_active: boolean;
     }[];
 }
 
@@ -89,9 +92,10 @@ function transformAuditor(apiAuditor: AuditorsApiResponse['auditors'][0]): Perso
     return {
         id: apiAuditor.id,
         name: apiAuditor.name,
-        role: apiAuditor.id,
+        role: "auditor",
         callCount: apiAuditor.total_assigned_leads,
-        messageCount: apiAuditor.total_audited_leads
+        messageCount: apiAuditor.total_audited_leads,
+        isActive: apiAuditor.is_active
     };
 }
 
@@ -99,8 +103,9 @@ function transformCounsellor(apiCounsellor: CounsellorsApiResponse['counsellors'
     return {
         id: apiCounsellor.id,
         name: apiCounsellor.name,
-        role: apiCounsellor.id,
-        callCount: apiCounsellor.total_calls
+        role: "counsellor",
+        callCount: apiCounsellor.total_calls,
+        isActive: apiCounsellor.is_active
     };
 }
 
@@ -165,10 +170,10 @@ async function fetchDashboardData(force: boolean = false): Promise<DashboardData
 
         // Make parallel API calls for better performance
         const [audResponse, counResponse] = await Promise.all([
-            axios.get('http://localhost:8000/api/v1/manager/auditors', {
+            axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/manager/auditors`, {
                 withCredentials: true
             }),
-            axios.get('http://localhost:8000/api/v1/manager/counsellor', {
+            axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/manager/counsellor`, {
                 withCredentials: true
             })
         ]);
@@ -260,7 +265,7 @@ const ManagerTeamDashboard: React.FC = () => {
     const [displayCounsellors, setDisplayCounsellors] = useState<PersonData[]>(dashboardCache.data?.counsellors || []);
     const [isLoading, setIsLoading] = useState<boolean>(dashboardCache.isLoading);
     const [error, setError] = useState<string>(dashboardCache.error || '');
-    const [openAddMemberModal, setOpenAddMemberModal] = useState<boolean>(false);
+    const { openAddMemberModal, setOpenAddMemberModal } = useDashboard();
 
     /**
      * Fetches dashboard data with intelligent caching
@@ -364,7 +369,7 @@ const ManagerTeamDashboard: React.FC = () => {
                                 <SearchBar onSearch={handleSearch} />
                                 {/* Add Button */}
                                 <div className='relative -top-4 bg-gray-300 p-2 rounded-full text-qc-dark/80 hover:text-qc-dark hover:bg-gray-400 transition-all duration-200 cursor-pointer'>
-                                <Plus size={36} onClick={() => setOpenAddMemberModal(true)} />
+                                    <Plus size={36} onClick={() => setOpenAddMemberModal(true)} />
                                 </div>
                             </div>
 
@@ -377,6 +382,7 @@ const ManagerTeamDashboard: React.FC = () => {
                                     totalCount={dashboardData.totalAuditors}
                                     showMessages={true}
                                     isLoading={false}
+                                    onRefresh={() => fetchData(true)}
                                 />
 
                                 {/* Counsellors Section */}
@@ -386,6 +392,7 @@ const ManagerTeamDashboard: React.FC = () => {
                                     totalCount={dashboardData.totalCounsellors}
                                     showMessages={false}
                                     isLoading={false}
+                                    onRefresh={() => fetchData(true)}
                                 />
                             </div>
                         </>
@@ -395,6 +402,7 @@ const ManagerTeamDashboard: React.FC = () => {
                         openAddMemberModal && (
                             <AddMember
                                 onCancel={() => setOpenAddMemberModal(false)}
+                                onRefresh={() => fetchData(true)}
                             />
                         )
                     }
