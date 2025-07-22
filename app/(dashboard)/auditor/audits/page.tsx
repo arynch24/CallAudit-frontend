@@ -288,7 +288,7 @@ const AiAuditsDashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen p-4">
+    <div className="p-4">
       <div className="max-w-7xl mx-auto">
         {auditsDashboardData && (
           <>
@@ -320,7 +320,7 @@ const AiAuditsDashboard: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
+                  <div className="space-y-3 max-h-[calc(100vh-270px)] scrollbar-hide overflow-y-auto">
                     {auditsDashboardData.audits.map((audit) => (
                       <AuditQueueItem
                         key={audit.id}
