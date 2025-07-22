@@ -4,8 +4,8 @@ import { AuthProvider } from "@/context/AuthenticationContext";
 import { ContextProvider } from "@/context/DashboardContext";
 
 export const metadata: Metadata = {
-  title: "IntelliResume - Your AI Resume Builder",
-  description: "Create professional resumes effortlessly with AI assistance. Tailor your resume to stand out in the job market.",
+  title: "QC Auditor",
+  description: "Quality Controler Dashboard for Auditors and Managers",
 };
 
 export default function RootLayout({
