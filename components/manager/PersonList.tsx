@@ -1,6 +1,7 @@
 import { PersonData } from '@/types/dashboard';
 import React, { useState } from 'react';
 import PersonCard from './PersonCard';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 interface PersonListProps {
     title: string;
@@ -20,11 +21,11 @@ const PersonList: React.FC<PersonListProps> = ({
     totalCount,
     showMessages = false,
     isLoading = false,
-    onRefresh = () => {},
+    onRefresh = () => { },
 }) => {
     const [showAll, setShowAll] = useState(false);
     const INITIAL_DISPLAY_COUNT = 4;
-    
+
     const displayedPeople = showAll ? people : people.slice(0, INITIAL_DISPLAY_COUNT);
     const hasMorePeople = people.length > INITIAL_DISPLAY_COUNT;
 
@@ -71,12 +72,11 @@ const PersonList: React.FC<PersonListProps> = ({
                     {people.length > 0 ? (
                         <>
                             {/* Scrollable container when showing all */}
-                            <div 
-                                className={`space-y-4 ${
-                                    showAll && hasMorePeople 
-                                        ? 'max-h-88 overflow-y-auto pr-2' 
-                                        : ''
-                                }`}
+                            <div
+                                className={`space-y-4 ${showAll && hasMorePeople
+                                    ? 'max-h-88 overflow-y-auto pr-2'
+                                    : ''
+                                    }`}
                             >
                                 {displayedPeople.map((person) => (
                                     <PersonCard
@@ -87,7 +87,7 @@ const PersonList: React.FC<PersonListProps> = ({
                                     />
                                 ))}
                             </div>
-                            
+
                             {/* View All / Show Less button */}
                             {hasMorePeople && (
                                 <div className="mt-6 pt-4 border-t border-gray-100 text-center">
@@ -96,19 +96,15 @@ const PersonList: React.FC<PersonListProps> = ({
                                         className="inline-flex items-center px-4 py-2 text-sm font-medium text-qc-dark hover:text-qc-accent hover:bg-qc-light/10 rounded-md transition-colors duration-200"
                                     >
                                         {showAll ? (
-                                            <>
+                                            <div className='flex items-center'>
                                                 Show Less
-                                                <svg className="ml-2 w-4 h-4 transform rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </>
+                                                <ChevronUp className="ml-2 h-4 w-4" />
+                                            </div>
                                         ) : (
-                                            <>
+                                            <div className='flex items-center'>
                                                 View All {people.length} {title.toLowerCase()}
-                                                <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </>
+                                                <ChevronDown className="ml-2 h-4 w-4" />
+                                            </div>
                                         )}
                                     </button>
                                 </div>

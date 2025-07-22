@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import Loader from '@/components/Loader';
 import Error from '@/components/ErrorBox';
-import { X } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
 
 /**
  * Interface for individual flagged review data structure
@@ -128,9 +128,15 @@ const FlagBadge: React.FC<{ flagReason: string }> = ({ flagReason }) => {
  * 
  * @param {Object} props - Component props
  * @param {FlaggedReview} props.review - The review data to display
+ * @param {Function} props.onUnflagReview - Function to handle unflagging
+ * @param {boolean} props.isUnflagging - Whether this review is currently being unflagged
  * @returns {JSX.Element} The rendered table row
  */
-const ReviewTableRow: React.FC<{ review: FlaggedReview, onUnflagReview: (id: string) => void }> = ({ review, onUnflagReview }) => (
+const ReviewTableRow: React.FC<{
+  review: FlaggedReview,
+  onUnflagReview: (id: string) => void,
+  isUnflagging: boolean
+}> = ({ review, onUnflagReview, isUnflagging }) => (
   <tr className="border-b border-gray-200 hover:bg-gray-50 transition-colors">
     <td className="px-4 py-4 text-sm font-medium text-qc-primary">
       {review.callNumber}
@@ -141,16 +147,21 @@ const ReviewTableRow: React.FC<{ review: FlaggedReview, onUnflagReview: (id: str
     <td className="px-4 py-4 text-sm text-qc-primary">
       {review.auditorComment}
     </td>
-    <td className="px-4 py-4 text-sm text-qc-primary">
-      {review.linkedAuditor}
-    </td>
     <td className="px-4 py-4">
       <FlagBadge flagReason={review.flagReason} />
     </td>
-    <td
-      onClick={() => onUnflagReview(review.id)}
-      className="w-fit flex items-center ml-4 mt-2 justify-center text-qc-accent cursor-pointer hover:text-qc-primary hover:bg-qc-dark/10 rounded-sm p-1 transition-colors" >
-      <X />
+    <td className="px-4 py-4">
+      <button
+        onClick={() => onUnflagReview(review.id)}
+        disabled={isUnflagging}
+        className="w-fit flex items-center justify-center text-qc-accent cursor-pointer hover:text-qc-primary hover:bg-qc-dark/10 rounded-sm p-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {isUnflagging ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <X className="h-4 w-4" />
+        )}
+      </button>
     </td>
   </tr>
 );
@@ -161,9 +172,15 @@ const ReviewTableRow: React.FC<{ review: FlaggedReview, onUnflagReview: (id: str
  * 
  * @param {Object} props - Component props
  * @param {FlaggedReview} props.review - The review data to display
+ * @param {Function} props.onUnflagReview - Function to handle unflagging
+ * @param {boolean} props.isUnflagging - Whether this review is currently being unflagged
  * @returns {JSX.Element} The rendered mobile card
  */
-const MobileReviewCard: React.FC<{ review: FlaggedReview, onUnflagReview: (id: string) => void }> = ({ review, onUnflagReview }) => (
+const MobileReviewCard: React.FC<{
+  review: FlaggedReview,
+  onUnflagReview: (id: string) => void,
+  isUnflagging: boolean
+}> = ({ review, onUnflagReview, isUnflagging }) => (
   <div className="border rounded-lg p-4 mb-4 shadow-sm bg-white">
     <div className="flex justify-between items-start mb-2">
       <span className="font-medium text-sm text-qc-primary">
@@ -181,16 +198,18 @@ const MobileReviewCard: React.FC<{ review: FlaggedReview, onUnflagReview: (id: s
         <span className="text-qc-accent">Auditor Comment:</span>
         <span className="text-qc-primary">{review.auditorComment}</span>
       </div>
-      <div className="flex justify-between">
-        <span className="text-qc-accent">Linked Auditor:</span>
-        <span className="text-qc-primary">{review.linkedAuditor}</span>
-      </div>
       <div className="flex justify-between mt-4">
         <span className="text-qc-accent">Action:</span>
         <button
           onClick={() => onUnflagReview(review.id)}
-          className="w-fit flex items-center justify-center text-qc-accent cursor-pointer hover:text-qc-primary hover:bg-qc-dark/10 rounded-sm p-1 transition-colors">
-          <X />
+          disabled={isUnflagging}
+          className="w-fit flex items-center justify-center text-qc-accent cursor-pointer hover:text-qc-primary hover:bg-qc-dark/10 rounded-sm p-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isUnflagging ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <X className="h-4 w-4" />
+          )}
         </button>
       </div>
     </div>
@@ -213,12 +232,15 @@ const MobileReviewCard: React.FC<{ review: FlaggedReview, onUnflagReview: (id: s
  * - Responsive design with table view for desktop and card view for mobile
  * - Pagination with "View more/View less" functionality
  * - Loading states and error handling
+ *  - Individual loading states for unflag actions
  * 
  * @returns {JSX.Element} The rendered flagged reviews component
  */
 const FlaggedReviewsComponent: React.FC = () => {
   // State for controlling how many reviews to display
   const [showAll, setShowAll] = useState(false);
+  // State to track which review is currently being unflagged
+  const [unflaggingId, setUnflaggingId] = useState<string | null>(null);
 
   // Initialize component state with cached values if available
   const [data, setData] = useState<FlaggedReviewsData | null>(flaggedReviewsCache.data);
@@ -287,16 +309,19 @@ const FlaggedReviewsComponent: React.FC = () => {
   };
 
   const handleUnflagReview = async (reviewId: string) => {
+    setUnflaggingId(reviewId);
+
     try {
       await axios.get(
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auditor/unflag?audit_id=${reviewId}`,
         { withCredentials: true }
       );
 
-      //refetch data to update the list
       await fetchFlaggedReviewsData(true);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to unflag review');
+    } finally {
+      setUnflaggingId(null);
     }
   }
 
@@ -341,12 +366,22 @@ const FlaggedReviewsComponent: React.FC = () => {
   return (
     <div className="w-full max-w-6xl mx-auto p-4">
       {/* Header Card - Shows total count of flagged reviews */}
-      <div className="rounded-lg p-6 mb-6 shadow-sm bg-qc-light/10">
-        <div className="text-3xl font-bold mb-2 text-qc-primary">
-          {data.totalFlaggedReviews}
+      <div className="flex justify-between rounded-lg p-6 mb-6 shadow-sm bg-qc-light/10">
+        <div>
+          <div className="text-3xl font-bold mb-2 text-qc-primary">
+            {data.totalFlaggedReviews}
+          </div>
+          <div className="text-sm text-qc-accent">
+            Total flagged reviews
+          </div>
         </div>
-        <div className="text-sm text-qc-accent">
-          Total flagged reviews
+        <div>
+          <button
+            onClick={() => fetchFlaggedReviewsData(true)}
+            className="mt-4 px-4 py-2 rounded-md border border-qc-accent text-sm font-medium text-qc-accent bg-transparent transition-colors hover:opacity-80"
+          >
+            {isLoading ? 'Refreshing...' : 'Refresh Data'}
+          </button>
         </div>
       </div>
 
@@ -365,9 +400,6 @@ const FlaggedReviewsComponent: React.FC = () => {
                 Auditor Comment
               </th>
               <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
-                Linked Auditor
-              </th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
                 Flag Reason
               </th>
               <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
@@ -377,7 +409,12 @@ const FlaggedReviewsComponent: React.FC = () => {
           </thead>
           <tbody>
             {displayedReviews.map((review) => (
-              <ReviewTableRow key={review.id} review={review} onUnflagReview={handleUnflagReview} />
+              <ReviewTableRow
+                key={review.id}
+                review={review}
+                onUnflagReview={handleUnflagReview}
+                isUnflagging={unflaggingId === review.id}
+              />
             ))}
           </tbody>
         </table>
@@ -386,7 +423,12 @@ const FlaggedReviewsComponent: React.FC = () => {
       {/* Mobile Cards View - Hidden on desktop */}
       <div className="md:hidden">
         {displayedReviews.map((review) => (
-          <MobileReviewCard key={review.id} review={review} onUnflagReview={handleUnflagReview} />
+          <MobileReviewCard
+            key={review.id}
+            review={review}
+            onUnflagReview={handleUnflagReview}
+            isUnflagging={unflaggingId === review.id}
+          />
         ))}
       </div>
 
@@ -395,7 +437,7 @@ const FlaggedReviewsComponent: React.FC = () => {
         <div className="flex justify-center mt-6">
           <button
             onClick={() => setShowAll(!showAll)}
-            className="px-6 py-2 rounded-md border border-qc-accent text-sm font-medium text-qc-accent bg-transparent transition-colors hover:opacity-80"
+            className="w-full px-6 py-2 border-1 border-qc-dark/20 text-sm font-medium text-qc-dark hover:text-qc-accent hover:bg-qc-light/10 rounded-md transition-colors duration-200"
           >
             {showAll ? 'View less' : 'View more'}
           </button>
