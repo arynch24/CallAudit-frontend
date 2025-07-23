@@ -30,6 +30,7 @@ const AddMember: React.FC<AddMemberProps> = ({ onCancel, onRefresh }) => {
         register,
         handleSubmit,
         reset,
+        watch,
         formState: { errors, isValid }
     } = useForm<FormData>({
         mode: 'onChange',
@@ -41,6 +42,9 @@ const AddMember: React.FC<AddMemberProps> = ({ onCancel, onRefresh }) => {
             auditorId: ''
         }
     });
+
+    // Watch the position field to conditionally show Auditor ID
+    const selectedPosition = watch('position');
 
     const onSubmit = async (data: FormData) => {
         setIsSubmitting(true);
@@ -185,22 +189,27 @@ const AddMember: React.FC<AddMemberProps> = ({ onCancel, onRefresh }) => {
                         )}
                     </div>
 
-                    {/* Auditor ID Field */}
-                    <div>
-                        <label htmlFor="auditorId" className="block font-medium text-gray-700 mb-3">
-                            Auditor ID <span className="text-gray-400 text-sm">(Optional)</span>
-                        </label>
-                        <input
-                            id="auditorId"
-                            type="text"
-                            placeholder="Enter the auditor ID..."
-                            className={`w-full px-4 py-3 text-sm border rounded-lg bg-white placeholder-gray-500 focus:outline-none ${errors.auditorId ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
-                                }`}
-                        />
-                        {errors.auditorId && (
-                            <p className="mt-1 text-sm text-red-600">{errors.auditorId.message}</p>
-                        )}
-                    </div>
+                    {/* Auditor ID Field - Only show when Counsellor is selected */}
+                    {selectedPosition === 'Counsellor' && (
+                        <div>
+                            <label htmlFor="auditorId" className="block font-medium text-gray-700 mb-3">
+                                Auditor ID <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                id="auditorId"
+                                type="text"
+                                {...register('auditorId', {
+                                    required: selectedPosition === 'Counsellor' ? 'Auditor ID is required for Counsellor position' : false
+                                })}
+                                placeholder="Enter the auditor ID..."
+                                className={`w-full px-4 py-3 text-sm border rounded-lg bg-white placeholder-gray-500 focus:outline-none ${errors.auditorId ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+                                    }`}
+                            />
+                            {errors.auditorId && (
+                                <p className="mt-1 text-sm text-red-600">{errors.auditorId.message}</p>
+                            )}
+                        </div>
+                    )}
 
                     {/* Error Message */}
                     {errorMessage && (

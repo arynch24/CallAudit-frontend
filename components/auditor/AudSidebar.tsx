@@ -165,7 +165,7 @@ const QCAuditSidebar: React.FC = () => {
                 flex flex-col transition-transform duration-300 z-50
             `}>
                 {/* Header Section */}
-                <div className="px-8 py-4 border-b border-gray-200">
+                <div className="px-8 py-[1.08rem] border-b border-gray-200">
                     <div className="flex items-center gap-3 cursor-pointer"
                         onClick={() => router.push('/')}>
                         {/* Institute of Innovation Logo */}
