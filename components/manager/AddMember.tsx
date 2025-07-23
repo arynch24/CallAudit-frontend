@@ -65,13 +65,9 @@ const AddMember: React.FC<AddMemberProps> = ({ onCancel, onRefresh }) => {
             onRefresh?.();
             setOpenAddMemberModal(false);
 
-        } catch (error) {
-            if (axios.isAxiosError(error)) {
-                const errorMessage = error.response?.data?.message || 'An error occurred while adding the member';
-                setErrorMessage(errorMessage);
-            } else {
-                setErrorMessage('An unexpected error occurred');
-            }
+        } catch (error: any) {
+            const errorMessage = error.response?.data?.message || 'An error occurred while adding the member';
+            setErrorMessage(errorMessage);
         } finally {
             setIsSubmitting(false);
         }

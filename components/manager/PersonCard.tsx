@@ -66,12 +66,7 @@ const PersonCard: React.FC<PersonCardProps> = ({ person, showMessages = false, o
             onRefresh?.();
 
         } catch (err: any) {
-            // Handle different types of errors
-            if (err.response?.data?.message) {
-                setError(err.response.data.message);
-            } else {
-                setError('An unexpected error occurred. Please try again.');
-            }
+            setError(err.response?.data?.message || 'An unexpected error occurred. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -97,12 +92,7 @@ const PersonCard: React.FC<PersonCardProps> = ({ person, showMessages = false, o
             onRefresh?.();
 
         } catch (err: any) {
-            // Handle different types of errors
-            if (err.response?.data?.message) {
-                setError(err.response.data.message);
-            } else {
-                setError('An unexpected error occurred. Please try again.');
-            }
+            setError(err.response?.data?.message || 'An unexpected error occurred. Please try again.');
         } finally {
             setIsLoading(false);
         }

@@ -171,7 +171,7 @@ const AiAuditsDashboard: React.FC = () => {
       }
 
     } catch (err: any) {
-      const errorMsg = err.response?.data?.message || err.message || 'Failed to fetch audit data';
+      const errorMsg = err.response?.data?.message || 'Failed to fetch audit data';
       auditDashboardCache.error = errorMsg;
       setError(errorMsg);
     } finally {

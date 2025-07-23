@@ -203,7 +203,7 @@ const AuditorDashboard: React.FC = () => {
       setManagerDashboardData(transformedData);
     } catch (err: any) {
       // Handle API errors
-      const errorMsg = err.message || 'Something went wrong';
+      const errorMsg = err.response?.data?.message || 'Something went wrong';
       dashboardCache.error = errorMsg;
       setError(errorMsg);
     } finally {

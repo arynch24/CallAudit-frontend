@@ -70,7 +70,7 @@ const QCAuditSignIn = () => {
         }
       });
 
-      const userData= res.data;
+      const userData = res.data;
 
       setUser(userData.user);
 
@@ -84,15 +84,9 @@ const QCAuditSignIn = () => {
         setError('Invalid role selected');
       }
 
-    } catch (error) {
-      const axiosError = error as AxiosError;
-
-      if (axiosError.response && axiosError.response.data) {
-        const message = (axiosError.response.data as { message?: string }).message;
-        setError(message || 'Something went wrong. Please try again.');
-      } else {
-        setError('Network error or server is not responding.');
-      }
+    } catch (error:any) {
+      const errorMsg = error.response?.data?.message;
+      setError(errorMsg || 'Something went wrong. Please try again.');
     } finally {
       // Always reset loading state
       setLoading(false);
