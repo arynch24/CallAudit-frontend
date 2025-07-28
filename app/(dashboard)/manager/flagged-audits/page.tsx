@@ -40,32 +40,11 @@ interface FlaggedAuditsResponse {
 }
 
 /**
- * Interface for the global cache structure
- * Manages cached data, timestamp, loading state, and error state
+ * Interface for grouped reviews by date
  */
-interface FlaggedReviewsCache {
-  data: FlaggedReviewsData | null;
-  timestamp: number | null;
-  isLoading: boolean;
-  error: string | null;
+interface GroupedReviews {
+  [date: string]: FlaggedReview[];
 }
-
-/**
- * Global cache object that persists across component re-renders and navigation
- * This ensures data is not refetched unnecessarily when navigating back to the flagged reviews
- */
-const flaggedReviewsCache: FlaggedReviewsCache = {
-  data: null,
-  timestamp: null,
-  isLoading: false,
-  error: null
-};
-
-/**
- * Cache duration in milliseconds (5 minutes)
- * Data will be considered stale after this duration and will be refetched
- */
-const CACHE_DURATION = 5 * 60 * 1000;
 
 /**
  * Transforms raw API response data into the format expected by UI components
@@ -78,18 +57,84 @@ const transformedApiResponse = (apiData: FlaggedAuditsResponse): FlaggedReviewsD
 
   const totalFlaggedReviews = flagged_audits.length;
   const reviews: FlaggedReview[] = flagged_audits.map((audit) => ({
-    id: audit.id, // Use audit id instead of auditor_id for uniqueness
+    id: audit.id,
+    callDateTime: new Date(audit.created_at).toLocaleString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }),
     callNumber: audit.client_number,
     counsellor: audit.counsellor_name,
     auditorComment: audit.comments,
     linkedAuditor: audit.auditor_name,
     flagReason: audit.flag_reason,
+    createdAt: audit.created_at, // Keep original timestamp for filtering
   }));
 
   return {
     totalFlaggedReviews,
     reviews
   };
+};
+
+/**
+ * Groups reviews by date and sorts them by time within each date
+ * 
+ * @param {FlaggedReview[]} reviews - Array of reviews to group
+ * @returns {GroupedReviews} Reviews grouped by date
+ */
+const groupReviewsByDate = (reviews: FlaggedReview[]): GroupedReviews => {
+  const grouped: GroupedReviews = {};
+
+  reviews.forEach(review => {
+    const date = new Date(review.callDateTime).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+
+    if (!grouped[date]) {
+      grouped[date] = [];
+    }
+    grouped[date].push(review);
+  });
+
+  // Sort reviews within each date by time (newest first)
+  Object.keys(grouped).forEach(date => {
+    grouped[date].sort((a, b) => {
+      const timeA = new Date(a.callDateTime).getTime();
+      const timeB = new Date(b.callDateTime).getTime();
+      return timeB - timeA; // Newest first
+    });
+  });
+
+  return grouped;
+};
+
+/**
+ * Filters reviews based on date range
+ * 
+ * @param {FlaggedReview[]} reviews - Array of reviews to filter
+ * @param {string} startDate - Start date in YYYY-MM-DD format
+ * @param {string} endDate - End date in YYYY-MM-DD format
+ * @returns {FlaggedReview[]} Filtered reviews
+ */
+const filterReviewsByDateRange = (reviews: FlaggedReview[], startDate: string, endDate: string): FlaggedReview[] => {
+  if (!startDate && !endDate) return reviews;
+
+  return reviews.filter(review => {
+    const reviewDate = new Date(review.callDateTime);
+    const start = startDate ? new Date(startDate) : null;
+    const end = endDate ? new Date(endDate + 'T23:59:59') : null; // Include the entire end date
+
+    if (start && reviewDate < start) return false;
+    if (end && reviewDate > end) return false;
+
+    return true;
+  });
 };
 
 /**
@@ -100,15 +145,16 @@ const transformedApiResponse = (apiData: FlaggedAuditsResponse): FlaggedReviewsD
  * - Call numbers and counsellor names
  * - Auditor comments and linked auditors
  * - Flag reasons with visual indicators
+ * - Date range filtering
+ * - Reviews grouped by date and sorted by time
  * 
  * Features:
- * - Automatic caching to prevent unnecessary API calls
- * - Cache expiration after 5 minutes
- * - Graceful error handling with fallback to cached data
+ * - Date range filter with start and end date inputs
+ * - Reviews organized by date with time-based sorting within each date
  * - Responsive design with table view for desktop and card view for mobile
  * - Pagination with "View more/View less" functionality
  * - Loading states and error handling
- *  - Individual loading states for unflag actions
+ * - Individual loading states for unflag actions
  * 
  * @returns {JSX.Element} The rendered flagged reviews component
  */
@@ -117,40 +163,22 @@ const FlaggedReviewsComponent: React.FC = () => {
   const [showAll, setShowAll] = useState(false);
   // State to track which review is currently being unflagged
   const [unflaggingId, setUnflaggingId] = useState<string | null>(null);
+  // State for date range filtering
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
-  // Initialize component state with cached values if available
-  const [data, setData] = useState<FlaggedReviewsData | null>(flaggedReviewsCache.data);
-  const [error, setError] = useState<string>(flaggedReviewsCache.error || '');
-  const [isLoading, setIsLoading] = useState<boolean>(flaggedReviewsCache.isLoading);
-
-  /**
-   * Checks if the cached data is still valid based on the cache duration
-   * 
-   * @returns {boolean} True if cache is valid, false if expired or no cache exists
-   */
-  const isCacheValid = (): boolean => {
-    if (!flaggedReviewsCache.timestamp) return false;
-    return Date.now() - flaggedReviewsCache.timestamp < CACHE_DURATION;
-  };
+  // Component state
+  const [data, setData] = useState<FlaggedReviewsData | null>(null);
+  const [error, setError] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   /**
-   * Fetches flagged reviews data from the API with intelligent caching
+   * Fetches flagged reviews data from the API
    * 
-   * @param {boolean} force - If true, bypasses cache and forces a fresh API call
    * @returns {Promise<void>}
    */
-  const fetchFlaggedReviewsData = async (force: boolean = false): Promise<void> => {
-    // Prevent multiple simultaneous API calls
-    if (flaggedReviewsCache.isLoading) return;
-
-    // Skip API call if we have valid cached data (unless forced)
-    if (!force && flaggedReviewsCache.data && isCacheValid()) {
-      return;
-    }
-
+  const fetchFlaggedReviewsData = async (): Promise<void> => {
     try {
-      // Update loading state in both cache and component
-      flaggedReviewsCache.isLoading = true;
       setIsLoading(true);
       setError('');
 
@@ -164,22 +192,12 @@ const FlaggedReviewsComponent: React.FC = () => {
 
       // Transform the raw API response
       const transformedData = transformedApiResponse(response.data);
-
-      // Update global cache with fresh data
-      flaggedReviewsCache.data = transformedData;
-      flaggedReviewsCache.timestamp = Date.now();
-      flaggedReviewsCache.error = null;
-
-      // Update component state
       setData(transformedData);
     } catch (err: any) {
       // Handle API errors
       const errorMsg = err.response?.data?.message || err.message || 'Something went wrong';
-      flaggedReviewsCache.error = errorMsg;
       setError(errorMsg);
     } finally {
-      // Reset loading state
-      flaggedReviewsCache.isLoading = false;
       setIsLoading(false);
     }
   };
@@ -193,41 +211,31 @@ const FlaggedReviewsComponent: React.FC = () => {
         { withCredentials: true }
       );
 
-      await fetchFlaggedReviewsData(true);
+      await fetchFlaggedReviewsData();
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to unflag review');
     } finally {
       setUnflaggingId(null);
     }
-  }
+  };
 
   /**
    * Effect hook that runs on component mount
-   * Checks for cached data and fetches fresh data if needed
    */
   useEffect(() => {
-    // Check if we have valid cached data
-    if (flaggedReviewsCache.data && isCacheValid()) {
-      // Use cached data immediately for faster rendering
-      setData(flaggedReviewsCache.data);
-      setError(flaggedReviewsCache.error || '');
-      setIsLoading(false);
-    } else {
-      // Cache is stale or doesn't exist, fetch fresh data
-      fetchFlaggedReviewsData();
-    }
+    fetchFlaggedReviewsData();
   }, []);
 
-  // Show loading spinner only if we don't have any data to display
+  // Show loading spinner
   if (isLoading && !data) {
     return <Loader text='Loading Flagged Reviews' />;
   }
 
-  // Show error page only if we have an error and no cached data to fall back to
+  // Show error page
   if (error && !data) {
     return <Error
       message={error}
-      onRetry={() => fetchFlaggedReviewsData(true)}
+      onRetry={fetchFlaggedReviewsData}
     />;
   }
 
@@ -236,85 +244,151 @@ const FlaggedReviewsComponent: React.FC = () => {
     return null;
   }
 
-  // Determine which reviews to display based on showAll state
-  const displayedReviews = showAll ? data.reviews : data.reviews.slice(0, 7);
+  // Filter reviews based on date range
+  const filteredReviews = filterReviewsByDateRange(data.reviews, startDate, endDate);
+
+  // Group filtered reviews by date
+  const groupedReviews = groupReviewsByDate(filteredReviews);
+  const dates = Object.keys(groupedReviews).sort((a, b) => new Date(b).getTime() - new Date(a).getTime()); // Sort dates newest first
+
+  // Determine which dates to display based on showAll state
+  const displayedDates = showAll ? dates : dates.slice(0, 7);
 
   return (
     <div className="w-full max-w-6xl mx-auto p-4">
-      {/* Header Card - Shows total count of flagged reviews */}
-      <div className="flex justify-between rounded-lg p-6 mb-6 shadow-sm bg-qc-light/10">
-        <div>
-          <div className="text-3xl font-bold mb-2 text-qc-primary">
-            {data.totalFlaggedReviews}
+      {/* Header Card - Shows total count of flagged reviews and date filters */}
+      <div className="rounded-lg p-6 mb-6 shadow-sm bg-qc-light/10">
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4">
+          <div>
+            <div className="text-3xl font-bold mb-2 text-qc-primary">
+              {filteredReviews.length}
+            </div>
+            <div className="text-sm text-qc-accent">
+              {startDate || endDate ? 'Filtered flagged reviews' : 'Total flagged reviews'}
+            </div>
           </div>
-          <div className="text-sm text-qc-accent">
-            Total flagged reviews
-          </div>
-        </div>
-        <div>
-          <button
-            onClick={() => fetchFlaggedReviewsData(true)}
-            className="mt-4 px-4 py-2 rounded-md border border-qc-accent text-sm font-medium text-qc-accent bg-transparent transition-colors hover:opacity-80"
-          >
-            {isLoading ? 'Refreshing...' : 'Refresh Data'}
-          </button>
-        </div>
-      </div>
 
-      {/* Desktop Table View - Hidden on mobile devices */}
-      <div className="hidden md:block bg-white rounded-lg shadow-sm overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-qc-light/5">
-            <tr>
-              <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
-                Call Number
-              </th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
-                Counsellor
-              </th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
-                Auditor Comment
-              </th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
-                Linked Auditor
-              </th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
-                Flag Reason
-              </th>
-              <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
-                Action
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayedReviews.map((review) => (
-              <ReviewTableRow
-                key={review.id}
-                review={review}
-                onUnflagReview={handleUnflagReview}
-                isUnflagging={unflaggingId === review.id}
-                role="manager" 
+          {/* Date Range Filter */}
+          <div className="flex flex-col sm:flex-row gap-4">
+            <div className="flex flex-col">
+              <label className="text-sm font-medium text-qc-accent mb-1">
+                Start Date
+              </label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="px-3 py-2 border border-qc-accent/30 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-qc-primary focus:border-transparent"
               />
-            ))}
-          </tbody>
-        </table>
+            </div>
+            <div className="flex flex-col">
+              <label className="text-sm font-medium text-qc-accent mb-1">
+                End Date
+              </label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="px-3 py-2 border border-qc-accent/30 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-qc-primary focus:border-transparent"
+              />
+            </div>
+            <div className="flex flex-col justify-end">
+              <button
+                onClick={() => {
+                  setStartDate('');
+                  setEndDate('');
+                }}
+                className="px-4 py-2 rounded-md border border-qc-accent text-sm font-medium text-qc-accent bg-transparent transition-colors hover:opacity-80"
+              >
+                Clear Filters
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Mobile Cards View - Hidden on desktop */}
-      <div className="md:hidden">
-        {displayedReviews.map((review) => (
-          <MobileReviewCard
-            key={review.id}
-            review={review}
-            onUnflagReview={handleUnflagReview}
-            isUnflagging={unflaggingId === review.id}
-            role="manager"
-          />
-        ))}
-      </div>
+      {/* Reviews organized by date */}
+      {displayedDates.length === 0 ? (
+        <div className="text-center py-8 text-qc-accent">
+          No flagged reviews found for the selected date range.
+        </div>
+      ) : (
+        displayedDates.map(date => (
+          <div key={date} className="mb-8">
+            {/* Date Header */}
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-qc-primary border-b border-qc-light/30 pb-2">
+                {new Date(date).toLocaleDateString('en-US', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric'
+                })} ({groupedReviews[date].length} reviews)
+              </h3>
+            </div>
 
-      {/* View More/Less Button - Only shown if there are more than 7 reviews */}
-      {data.reviews.length > 7 && (
+            {/* Desktop Table View - Hidden on mobile devices */}
+            <div className="hidden md:block bg-white rounded-lg shadow-sm overflow-hidden mb-4">
+              <table className="w-full">
+                <thead className="bg-qc-light/5">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
+                      Time
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
+                      Call Number
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
+                      Counsellor
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
+                      Auditor Comment
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
+                      Linked Auditor
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
+                      Flag Reason
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupedReviews[date].map((review) => (
+                    <ReviewTableRow
+                      key={review.id}
+                      review={review}
+                      onUnflagReview={handleUnflagReview}
+                      isUnflagging={unflaggingId === review.id}
+                      showTimeOnly={true}
+                      role="manager"
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View - Hidden on desktop */}
+            <div className="md:hidden space-y-4">
+              {groupedReviews[date].map((review) => (
+                <MobileReviewCard
+                  key={review.id}
+                  review={review}
+                  onUnflagReview={handleUnflagReview}
+                  isUnflagging={unflaggingId === review.id}
+                  showTimeOnly={true}
+                  role="manager"
+                />
+              ))}
+            </div>
+          </div>
+        ))
+      )}
+
+      {/* View More/Less Button - Only shown if there are more than 7 dates */}
+      {dates.length > 7 && (
         <div className="flex justify-center mt-6">
           <button
             onClick={() => setShowAll(!showAll)}
@@ -325,10 +399,10 @@ const FlaggedReviewsComponent: React.FC = () => {
         </div>
       )}
 
-      {/* Warning message if there's an error but we have cached data to show */}
-      {error && data && (
-        <div className="mt-4 p-4 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded">
-          Warning: Failed to refresh data. Showing cached data. Error: {error}
+      {/* Error message */}
+      {error && (
+        <div className="mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+          Error: {error}
         </div>
       )}
     </div>

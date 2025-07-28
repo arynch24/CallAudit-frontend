@@ -16,6 +16,8 @@ const DashboardLayout = ({ children }: Readonly<{ children: React.ReactNode; }>)
                 return 'Auditor Dashboard';
             case '/auditor/audits':
                 return 'AI Audits';
+            case '/auditor/flagged-audits':
+                return 'Flagged Audits';
             case '/auditor/help':
                 return 'Help';
             default:
