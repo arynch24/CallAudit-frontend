@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Check, Flag, Pause, Play, ChevronRight, Maximize2 } from 'lucide-react';
+import { Check, Pause, Play, ChevronRight, Maximize2,ChevronDown } from 'lucide-react';
 import ExpandableDialog from './ExpandableDialog';
 
 // Mock type for demonstration
@@ -21,7 +21,7 @@ interface AuditItem {
  */
 interface AuditDetailsProps {
     audit: AuditItem | null;
-    onApprove: (auditId: string, comments?: string, isFlag?: boolean, flagReasons?: string) => void;
+    onApprove: (auditId: string, comments?: string, flagType?: string, flagReasons?: string) => void;
     onApproveLoading: boolean;
 }
 
@@ -34,7 +34,6 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
     onApproveLoading
 }) => {
     const [flagReason, setFlagReason] = useState('');
-    const [showFlagInput, setShowFlagInput] = useState(false);
     const [comments, setComments] = useState('');
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
@@ -43,13 +42,13 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
     const [audioError, setAudioError] = useState('');
     const [showSummaryDialog, setShowSummaryDialog] = useState(false);
     const [showAnomaliesDialog, setShowAnomaliesDialog] = useState(false);
+    const [flagType, setFlagType] = useState('');
 
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
     useEffect(() => {
         setComments('');
         setFlagReason('');
-        setShowFlagInput(false);
         setIsPlaying(false);
         setCurrentTime(0);
         setAudioDuration(0);
@@ -144,7 +143,7 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
 
     const handleApproveClick = () => {
         if (audit) {
-            onApprove(audit.id, comments.trim() || undefined, showFlagInput, flagReason.trim());
+            onApprove(audit.id, comments.trim() || undefined, flagType, flagReason.trim());
         }
     };
 
@@ -315,27 +314,31 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
                     </div>
 
                     {/* Flag Section */}
-                    <div className="mb-6">
+                    <div className="flex gap-6 items-start mb-6">
                         <div className="flex items-center gap-2 mb-3">
-                            <button
-                                onClick={() => setShowFlagInput(!showFlagInput)}
-                                className="flex items-center gap-2 px-3 py-2 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors"
-                            >
-                                <Flag className="w-4 h-4" />
-                                Flag
-                            </button>
-                        </div>
-                        {showFlagInput && (
-                            <div className="space-y-3">
-                                <textarea
-                                    placeholder="Write reason for flag..."
-                                    value={flagReason}
-                                    onChange={(e) => setFlagReason(e.target.value)}
-                                    className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-qc-accent focus:border-transparent"
-                                    rows={3}
-                                />
+                            <div className="relative">
+                                <select
+                                    value={flagType}
+                                    onChange={(e) => setFlagType(e.target.value)}
+                                    className="appearance-none px-3 py-2 pr-8 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors focus:outline-none cursor-pointer"
+                                >
+                                    <option value="">Flag</option>
+                                    <option value="Normal">Normal</option>
+                                    <option value="Concern">Concern</option>
+                                    <option value="Fatal">Fatal</option>
+                                </select>
+                                <ChevronDown size={16} className="absolute right-3 top-1/2 transform -translate-y-1/2 text-red-700 pointer-events-none" />
                             </div>
-                        )}
+                        </div>
+                        <div className="w-full">
+                            <textarea
+                                placeholder="Write reason for flag..."
+                                value={flagReason}
+                                onChange={(e) => setFlagReason(e.target.value)}
+                                className="w-full p-3 border border-gray-300 rounded-lg resize-none focus:ring-2 focus:ring-qc-accent focus:border-transparent"
+                                rows={3}
+                            />
+                        </div>
                     </div>
                 </div>
 

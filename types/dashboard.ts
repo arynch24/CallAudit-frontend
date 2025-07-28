@@ -111,7 +111,6 @@ interface AuditItem {
  duration: number;
  confidence: number;
  tags: string[];
- type: string;
  summary: string;
  sentiments: 'Positive' | 'Negative' | 'Neutral';
  anomalies: string;
@@ -151,6 +150,7 @@ export interface StatsCardData {
  */
 export interface FlaggedReview {
     id: string;
+    callDateTime: string;
     callNumber: string;
     counsellor: string;
     auditorComment: string;

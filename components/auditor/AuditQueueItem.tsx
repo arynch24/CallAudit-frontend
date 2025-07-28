@@ -52,9 +52,14 @@ const AuditQueueItem: React.FC<AuditQueueItemProps> = ({
                     <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600 mb-2">
                         <span>Duration: {audit.duration} minutes</span>
                         <span className="hidden sm:inline">•</span>
-                        <span className="px-2 py-1 bg-gray-100 rounded text-xs">
-                            {audit.type}
-                        </span>
+                        {
+                            audit.tags.map((tag, index) => (
+                                <span key={index} className="px-2 py-1 bg-gray-100 rounded text-xs">
+                                    {tag}
+                                </span>
+                            ))
+                        }
+
                     </div>
 
                     {audit.tags.length > 0 && (

@@ -90,18 +90,9 @@ const AiAuditsDashboard: React.FC = () => {
     const transformedAudits: AuditItem[] = calls ? calls.map(call => ({
       id: call.id,
       callId: call.client_number,
-      duration: call.duration,
-      confidence: call.ai_confidence,
-      tags: call.tags ? call.tags.split(',').map(tag => tag.trim()).filter(tag => tag) : [],
-      type: (() => {
-        if (!call.tags) return 'General';
-        const tagLower = call.tags.toLowerCase();
-        if (tagLower.includes('voice assistant')) return 'Voice Assistant';
-        if (tagLower.includes('support')) return 'Support';
-        if (tagLower.includes('sales')) return 'Sales';
-        if (tagLower.includes('intermediate')) return 'Intermediate';
-        return 'General';
-      })(),
+      duration: call.duration/60,
+      confidence: call.ai_confidence*100,
+      tags: call.tags ? call.tags.split(',').map(tag => tag.trim()) : [],
       summary: call.summary || 'No summary available',
       sentiments: call.sentiment_score > 0 ? 'Positive' : call.sentiment_score < 0 ? 'Negative' : 'Neutral',
       anomalies: call.anomalies || 'No anomalies detected',
@@ -205,12 +196,12 @@ const AiAuditsDashboard: React.FC = () => {
   /**
    * Unified handler for both approve and flag operations
    */
-  const handleApprove = async (auditId: string, comments?: string, isFlag: boolean = false, flagReasons: string = '') => {
+  const handleApprove = async (auditId: string, comments?: string, flagType: string = '', flagReasons: string = '') => {
     try {
       const requestData = {
         call_id: auditId,
         comments: comments || '',
-        is_flag: isFlag,
+        flag: flagType.toUpperCase(),
         flag_reasons: flagReasons,
       };
       setIsApproveLoading(true);
@@ -233,7 +224,7 @@ const AiAuditsDashboard: React.FC = () => {
           ...auditsDashboardData.stats,
           totalCompleted: auditsDashboardData.stats.totalCompleted + 1,
           totalPending: Math.max(0, auditsDashboardData.stats.totalPending - 1),
-          flaggedCount: isFlag
+          flaggedCount: flagType
             ? auditsDashboardData.stats.flaggedCount + 1
             : auditsDashboardData.stats.flaggedCount
         };
@@ -255,7 +246,7 @@ const AiAuditsDashboard: React.FC = () => {
       handleAuditApprove(auditId);
 
     } catch (err: any) {
-      const errorMsg = err.response?.data?.message || err.message || `Failed to ${isFlag ? 'flag' : 'approve'} audit`;
+      const errorMsg = err.response?.data?.message || err.message || 'Failed to approve audit';
       setError(errorMsg);
     } finally {
       setIsApproveLoading(false);
