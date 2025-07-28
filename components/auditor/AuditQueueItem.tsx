@@ -50,20 +50,12 @@ const AuditQueueItem: React.FC<AuditQueueItemProps> = ({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2 text-sm text-gray-600 mb-2">
-                        <span>Duration: {audit.duration} minutes</span>
-                        <span className="hidden sm:inline">•</span>
-                        {
-                            audit.tags.map((tag, index) => (
-                                <span key={index} className="px-2 py-1 bg-gray-100 rounded text-xs">
-                                    {tag}
-                                </span>
-                            ))
-                        }
-
+                        <span>Duration: {audit.duration.toFixed(2)} minutes</span>
                     </div>
 
                     {audit.tags.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mb-2">
+                        <div className="flex flex-wrap items-center gap-1 mb-2">
+                            <span className="text-qc-dark text-sm">Tags:</span>
                             {audit.tags.map((tag, index) => (
                                 <span
                                     key={index}
