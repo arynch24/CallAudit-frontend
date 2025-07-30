@@ -111,9 +111,9 @@ const AuditorDashboard: React.FC = () => {
 
     // Create stats array for the stat cards
     const stats: DashboardStat[] = [
-      { value: total_assigned_leads, label: 'Total audited calls', icon: Stamp },
-      { value: total_audited_calls, label: 'Pending Audits', icon: FileClock },
-      { value: pending_audits, label: 'Total Leads Assigned', icon: Phone },
+      { value: total_assigned_leads, label: 'Total Leads calls', icon: Stamp },
+      { value: total_audited_calls, label: 'Total Audited calls', icon: FileClock },
+      { value: pending_audits, label: 'Pending Audits', icon: Phone },
       { value: flagged_calls, label: 'Flagged Calls', icon: Flag }
     ];
 
