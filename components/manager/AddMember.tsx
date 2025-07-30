@@ -2,6 +2,7 @@ import { useForm } from 'react-hook-form';
 import axios from 'axios';
 import { useDashboard } from '@/context/DashboardContext';
 import { useState } from 'react';
+import { PersonData } from '@/types/dashboard';
 
 interface FormData {
     name: string;
@@ -14,9 +15,10 @@ interface FormData {
 interface AddMemberProps {
     onCancel?: () => void;
     onRefresh?: () => void;
+    auditors: PersonData[];
 }
 
-const AddMember: React.FC<AddMemberProps> = ({ onCancel, onRefresh }) => {
+const AddMember: React.FC<AddMemberProps> = ({ onCancel, onRefresh, auditors }) => {
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const { setOpenAddMemberModal } = useDashboard();
@@ -193,18 +195,23 @@ const AddMember: React.FC<AddMemberProps> = ({ onCancel, onRefresh }) => {
                     {selectedPosition === 'Counsellor' && (
                         <div>
                             <label htmlFor="auditorId" className="block font-medium text-gray-700 mb-3">
-                                Auditor ID <span className="text-red-500">*</span>
+                                Select Auditor <span className="text-red-500">*</span>
                             </label>
-                            <input
+                            <select
                                 id="auditorId"
-                                type="text"
                                 {...register('auditorId', {
-                                    required: selectedPosition === 'Counsellor' ? 'Auditor ID is required for Counsellor position' : false
+                                    required: selectedPosition === 'Counsellor' ? 'Please select an auditor for Counsellor position' : false
                                 })}
-                                placeholder="Enter the auditor ID..."
-                                className={`w-full px-4 py-3 text-sm border rounded-lg bg-white placeholder-gray-500 focus:outline-none ${errors.auditorId ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
+                                className={`w-full px-4 py-3 text-sm border rounded-lg bg-white text-gray-700 focus:outline-none appearance-none cursor-pointer ${errors.auditorId ? 'border-red-500 focus:ring-red-500' : 'border-gray-300 focus:ring-blue-500'
                                     }`}
-                            />
+                            >
+                                <option value="">Select an auditor</option>
+                                {auditors.map((auditor) => (
+                                    <option key={auditor.id} value={auditor.id}>
+                                        {auditor.name} - {auditor.email}
+                                    </option>
+                                ))}
+                            </select>
                             {errors.auditorId && (
                                 <p className="mt-1 text-sm text-red-600">{errors.auditorId.message}</p>
                             )}

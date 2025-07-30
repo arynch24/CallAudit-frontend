@@ -312,6 +312,7 @@ const ManagerTeamDashboard: React.FC = () => {
                             <AddMember
                                 onCancel={() => setOpenAddMemberModal(false)}
                                 onRefresh={fetchData}
+                                auditors={dashboardData?.auditors || []}
                             />
                         )
                     }
