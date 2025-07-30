@@ -18,7 +18,7 @@ import Error from '@/components/ErrorBox';
 interface DashboardData {
     stats: DashboardStat[];
     flaggedCallsStats: FlaggedCallsStats;
-    weeklyAuditData: DailyAuditData[];
+    dailyAuditData: DailyAuditData[];
     averageAuditPercentage: number;
     latestFlaggedAudits: FlaggedAudit[];
 }
@@ -53,34 +53,6 @@ export interface DashboardAPIResponse {
 }
 
 /**
- * Interface for the global cache structure
- * Manages cached data, timestamp, loading state, and error state
- */
-interface DashboardCache {
-    data: DashboardData | null;
-    timestamp: number | null;
-    isLoading: boolean;
-    error: string | null;
-}
-
-/**
- * Global cache object that persists across component re-renders and navigation
- * This ensures data is not refetched unnecessarily when navigating back to the dashboard
- */
-const dashboardCache: DashboardCache = {
-    data: null,
-    timestamp: null,
-    isLoading: false,
-    error: null
-};
-
-/**
- * Cache duration in milliseconds (5 minutes)
- * Data will be considered stale after this duration and will be refetched
- */
-const CACHE_DURATION = 5 * 60 * 1000;
-
-/**
  * Manager Dashboard Component
  * 
  * This component displays the main dashboard for managers with key metrics including:
@@ -92,18 +64,16 @@ const CACHE_DURATION = 5 * 60 * 1000;
  * - List of latest flagged audits
  * 
  * Features:
- * - Automatic caching to prevent unnecessary API calls
- * - Cache expiration after 5 minutes
- * - Graceful error handling with fallback to cached data
+ * - Real-time data fetching from API
+ * - Graceful error handling with retry functionality
  * - Responsive design for mobile and desktop
  * 
  * @returns {JSX.Element} The rendered manager dashboard
  */
 const ManagerDashboard: React.FC = () => {
-    // Initialize component state with cached values if available
-    const [managerDashboardData, setManagerDashboardData] = useState<DashboardData | null>(dashboardCache.data);
-    const [error, setError] = useState<string>(dashboardCache.error || '');
-    const [isLoading, setIsLoading] = useState<boolean>(dashboardCache.isLoading);
+    const [managerDashboardData, setManagerDashboardData] = useState<DashboardData | null>(null);
+    const [error, setError] = useState<string>('');
+    const [isLoading, setIsLoading] = useState<boolean>(true);
 
     /**
      * Transforms raw API response data into the format expected by dashboard components
@@ -133,7 +103,7 @@ const ManagerDashboard: React.FC = () => {
         };
 
         // Transform weekly data for the line chart
-        const weeklyAuditData: DailyAuditData[] = last_7_days_data.map((d, idx) => ({
+        const dailyAuditData: DailyAuditData[] = last_7_days_data.map((d, idx) => ({
             day: new Date(d.date).toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric'
@@ -144,7 +114,7 @@ const ManagerDashboard: React.FC = () => {
         // Calculate average audit percentage across the week
         const averageAuditPercentage =
             Math.trunc(
-                (weeklyAuditData.reduce((sum, d) => sum + d.percentage, 0) / weeklyAuditData.length) * 100
+                (dailyAuditData.reduce((sum, d) => sum + d.percentage, 0) / dailyAuditData.length) * 100
             ) / 100;
 
         // Transform flagged audits data for the table
@@ -160,40 +130,19 @@ const ManagerDashboard: React.FC = () => {
         return {
             stats,
             flaggedCallsStats,
-            weeklyAuditData,
+            dailyAuditData,
             averageAuditPercentage,
             latestFlaggedAudits
         };
     };
 
     /**
-     * Checks if the cached data is still valid based on the cache duration
+     * Fetches dashboard data from the API
      * 
-     * @returns {boolean} True if cache is valid, false if expired or no cache exists
-     */
-    const isCacheValid = (): boolean => {
-        if (!dashboardCache.timestamp) return false;
-        return Date.now() - dashboardCache.timestamp < CACHE_DURATION;
-    };
-
-    /**
-     * Fetches dashboard data from the API with intelligent caching
-     * 
-     * @param {boolean} force - If true, bypasses cache and forces a fresh API call
      * @returns {Promise<void>}
      */
-    const fetchDashboardData = async (force: boolean = false): Promise<void> => {
-        // Prevent multiple simultaneous API calls
-        if (dashboardCache.isLoading) return;
-
-        // Skip API call if we have valid cached data (unless forced)
-        if (!force && dashboardCache.data && isCacheValid()) {
-            return;
-        }
-
+    const fetchDashboardData = async (): Promise<void> => {
         try {
-            // Update loading state in both cache and component
-            dashboardCache.isLoading = true;
             setIsLoading(true);
             setError('');
 
@@ -205,51 +154,35 @@ const ManagerDashboard: React.FC = () => {
             // Transform the raw API response
             const transformedData = transformDashboardData(response.data);
 
-            // Update global cache with fresh data
-            dashboardCache.data = transformedData;
-            dashboardCache.timestamp = Date.now();
-            dashboardCache.error = null;
-
             // Update component state
             setManagerDashboardData(transformedData);
         } catch (err: any) {
             // Handle API errors
             const errorMsg = err.response?.data?.message || 'Something went wrong';
-            dashboardCache.error = errorMsg;
             setError(errorMsg);
         } finally {
             // Reset loading state
-            dashboardCache.isLoading = false;
             setIsLoading(false);
         }
     };
 
     /**
      * Effect hook that runs on component mount
-     * Checks for cached data and fetches fresh data if needed
+     * Fetches dashboard data from API
      */
     useEffect(() => {
-        // Check if we have valid cached data
-        if (dashboardCache.data && isCacheValid()) {
-            // Use cached data immediately for faster rendering
-            setManagerDashboardData(dashboardCache.data);
-            setError(dashboardCache.error || '');
-            setIsLoading(false);
-        } else {
-            // Cache is stale or doesn't exist, fetch fresh data
-            fetchDashboardData();
-        }
+        fetchDashboardData();
     }, []);
 
-    // Show loading spinner only if we don't have any data to display
-    if (isLoading && !managerDashboardData) {
+    // Show loading spinner while fetching data
+    if (isLoading) {
         return <Loader text='Loading Manager Dashboard' />;
     }
 
-    // Show error page only if we have an error and no cached data to fall back to
-    if (error && !managerDashboardData) {
+    // Show error page if there's an error
+    if (error) {
         return <Error message={error}
-            onRetry={() => fetchDashboardData(true)}
+            onRetry={fetchDashboardData}
         />;
     }
 
@@ -274,7 +207,7 @@ const ManagerDashboard: React.FC = () => {
 
                                     {/* Weekly audit trend line chart */}
                                     <WeeklyAuditChart
-                                        data={managerDashboardData.weeklyAuditData}
+                                        data={managerDashboardData.dailyAuditData}
                                         averagePercentage={managerDashboardData.averageAuditPercentage}
                                     />
                                 </div>
@@ -282,13 +215,6 @@ const ManagerDashboard: React.FC = () => {
                                 {/* Latest Flagged Audits Table */}
                                 <LatestFlaggedAudits audits={managerDashboardData.latestFlaggedAudits} />
                             </>
-                        )}
-
-                        {/* Warning message if there's an error but we have cached data to show */}
-                        {error && managerDashboardData && (
-                            <div className="mt-4 p-4 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded">
-                                Warning: Failed to refresh data. Showing cached data. Error: {error}
-                            </div>
                         )}
                     </div>
                 </div>

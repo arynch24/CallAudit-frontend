@@ -23,6 +23,7 @@ interface AuditorsApiResponse {
     auditors: {
         id: string;
         name: string;
+        email: string;
         total_assigned_leads: number;
         total_audited_leads: number;
         is_active: boolean;
@@ -58,34 +59,6 @@ interface DashboardData {
 }
 
 /**
- * Interface for the global cache structure
- * Manages cached data, timestamp, loading state, and error state
- */
-interface DashboardCache {
-    data: DashboardData | null;
-    timestamp: number | null;
-    isLoading: boolean;
-    error: string | null;
-}
-
-/**
- * Global cache object that persists across component re-renders and navigation
- * This ensures data is not refetched unnecessarily when navigating back to the dashboard
- */
-const dashboardCache: DashboardCache = {
-    data: null,
-    timestamp: null,
-    isLoading: false,
-    error: null
-};
-
-/**
- * Cache duration in milliseconds (5 minutes)
- * Data will be considered stale after this duration and will be refetched
- */
-const CACHE_DURATION = 5 * 60 * 1000;
-
-/**
  * Data transformation utilities
  */
 function transformAuditor(apiAuditor: AuditorsApiResponse['auditors'][0]): PersonData {
@@ -95,7 +68,8 @@ function transformAuditor(apiAuditor: AuditorsApiResponse['auditors'][0]): Perso
         role: "auditor",
         callCount: apiAuditor.total_assigned_leads,
         messageCount: apiAuditor.total_audited_leads,
-        isActive: apiAuditor.is_active
+        isActive: apiAuditor.is_active,
+        email: apiAuditor.email
     };
 }
 
@@ -105,7 +79,8 @@ function transformCounsellor(apiCounsellor: CounsellorsApiResponse['counsellors'
         name: apiCounsellor.name,
         role: "counsellor",
         callCount: apiCounsellor.total_calls,
-        isActive: apiCounsellor.is_active
+        isActive: apiCounsellor.is_active,
+        email: apiCounsellor.email
     };
 }
 
@@ -140,34 +115,12 @@ function createStatsData(
 }
 
 /**
- * Fetches dashboard data from API endpoints with intelligent caching
+ * Fetches dashboard data from API endpoints
  * 
- * @param {boolean} force - If true, bypasses cache and forces a fresh API call
  * @returns {Promise<DashboardData>} Combined dashboard data
  */
-async function fetchDashboardData(force: boolean = false): Promise<DashboardData> {
-    // Prevent multiple simultaneous API calls
-    if (dashboardCache.isLoading) {
-        // Wait for ongoing request to complete
-        while (dashboardCache.isLoading) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-        }
-
-        // Return cached data if available after waiting
-        if (dashboardCache.data) {
-            return dashboardCache.data;
-        }
-    }
-
-    // Skip API call if we have valid cached data (unless forced)
-    if (!force && dashboardCache.data && isCacheValid()) {
-        return dashboardCache.data;
-    }
-
+async function fetchDashboardData(): Promise<DashboardData> {
     try {
-        // Update loading state in cache
-        dashboardCache.isLoading = true;
-
         // Make parallel API calls for better performance
         const [audResponse, counResponse] = await Promise.all([
             axios.get(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/manager/auditors`, {
@@ -194,30 +147,11 @@ async function fetchDashboardData(force: boolean = false): Promise<DashboardData
             totalCounsellors: counsellorsResponse.total_counsellors
         };
 
-        // Update global cache with fresh data
-        dashboardCache.data = dashboardData;
-        dashboardCache.timestamp = Date.now();
-        dashboardCache.error = null;
-
         return dashboardData;
     } catch (error: any) {
-        const errorMsg = error.response.data.message || 'Failed to fetch dashboard data';
-        dashboardCache.error = errorMsg;
-        throw error;
-    } finally {
-        // Reset loading state
-        dashboardCache.isLoading = false;
+        const errorMsg = error.response?.data?.message || 'Failed to fetch dashboard data';
+        throw errorMsg;
     }
-}
-
-/**
- * Checks if the cached data is still valid based on the cache duration
- * 
- * @returns {boolean} True if cache is valid, false if expired or no cache exists
- */
-function isCacheValid(): boolean {
-    if (!dashboardCache.timestamp) return false;
-    return Date.now() - dashboardCache.timestamp < CACHE_DURATION;
 }
 
 function filterPeople(query: string, dashboardData: DashboardData): {
@@ -248,41 +182,32 @@ function filterPeople(query: string, dashboardData: DashboardData): {
 }
 
 /**
- * Main Dashboard component with intelligent caching
+ * Main Dashboard component
  * 
  * Features:
- * - Automatic caching to prevent unnecessary API calls
- * - Cache expiration after 5 minutes
- * - Graceful error handling with fallback to cached data
- * - Instant search filtering without API calls
- * - Optimistic UI updates for better user experience
+ * - Real-time data fetching from API
+ * - Instant search filtering
+ * - Error handling with retry functionality
  */
 const ManagerTeamDashboard: React.FC = () => {
-    // Initialize component state with cached values if available
-    const [dashboardData, setDashboardData] = useState<DashboardData | null>(dashboardCache.data);
-    const [displayAuditors, setDisplayAuditors] = useState<PersonData[]>(dashboardCache.data?.auditors || []);
-    const [displayCounsellors, setDisplayCounsellors] = useState<PersonData[]>(dashboardCache.data?.counsellors || []);
-    const [isLoading, setIsLoading] = useState<boolean>(dashboardCache.isLoading);
-    const [error, setError] = useState<string>(dashboardCache.error || '');
+    const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+    const [displayAuditors, setDisplayAuditors] = useState<PersonData[]>([]);
+    const [displayCounsellors, setDisplayCounsellors] = useState<PersonData[]>([]);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string>('');
     const { openAddMemberModal, setOpenAddMemberModal } = useDashboard();
 
     /**
-     * Fetches dashboard data with intelligent caching
+     * Fetches dashboard data from API
      * 
-     * @param {boolean} force - If true, bypasses cache and forces a fresh API call
      * @returns {Promise<void>}
      */
-    const fetchData = async (force: boolean = false): Promise<void> => {
-        // Skip if we have valid cached data (unless forced)
-        if (!force && dashboardData && isCacheValid()) {
-            return;
-        }
-
+    const fetchData = async (): Promise<void> => {
         try {
             setIsLoading(true);
             setError('');
 
-            const data = await fetchDashboardData(force);
+            const data = await fetchDashboardData();
 
             setDashboardData(data);
             setDisplayAuditors(data.auditors);
@@ -313,25 +238,14 @@ const ManagerTeamDashboard: React.FC = () => {
 
     /**
      * Effect hook that runs on component mount
-     * Checks for cached data and fetches fresh data if needed
+     * Fetches dashboard data from API
      */
     useEffect(() => {
-        // Check if we have valid cached data
-        if (dashboardCache.data && isCacheValid()) {
-            // Use cached data immediately for faster rendering
-            setDashboardData(dashboardCache.data);
-            setDisplayAuditors(dashboardCache.data.auditors);
-            setDisplayCounsellors(dashboardCache.data.counsellors);
-            setError(dashboardCache.error || '');
-            setIsLoading(false);
-        } else {
-            // Cache is stale or doesn't exist, fetch fresh data
-            fetchData();
-        }
+        fetchData();
     }, []);
 
-    // Show loading spinner only if we don't have any data to display
-    if (isLoading && !dashboardData) {
+    // Show loading spinner while fetching data
+    if (isLoading) {
         return (
             <Loader
                 text='Loading Teams'
@@ -339,13 +253,13 @@ const ManagerTeamDashboard: React.FC = () => {
         );
     }
 
-    // Show error page only if we have an error and no cached data to fall back to
-    if (error && !dashboardData) {
+    // Show error page if there's an error
+    if (error) {
         return (
             <Error
                 title='Something went wrong'
                 message={error}
-                onRetry={() => fetchData(true)}
+                onRetry={fetchData}
             />
         );
     }
@@ -381,7 +295,7 @@ const ManagerTeamDashboard: React.FC = () => {
                                     totalCount={dashboardData.totalAuditors}
                                     showMessages={true}
                                     isLoading={false}
-                                    onRefresh={() => fetchData(true)}
+                                    onRefresh={fetchData}
                                 />
 
                                 {/* Counsellors Section */}
@@ -391,7 +305,7 @@ const ManagerTeamDashboard: React.FC = () => {
                                     totalCount={dashboardData.totalCounsellors}
                                     showMessages={false}
                                     isLoading={false}
-                                    onRefresh={() => fetchData(true)}
+                                    onRefresh={fetchData}
                                 />
                             </div>
                         </>
@@ -401,17 +315,10 @@ const ManagerTeamDashboard: React.FC = () => {
                         openAddMemberModal && (
                             <AddMember
                                 onCancel={() => setOpenAddMemberModal(false)}
-                                onRefresh={() => fetchData(true)}
+                                onRefresh={fetchData}
                             />
                         )
                     }
-
-                    {/* Warning message if there's an error but we have cached data to show */}
-                    {error && dashboardData && (
-                        <div className="mt-4 p-4 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded">
-                            Warning: Failed to refresh data. Showing cached data. Error: {error}
-                        </div>
-                    )}
                 </div>
             </div>
         </div>
