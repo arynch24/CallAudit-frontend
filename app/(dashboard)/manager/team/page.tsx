@@ -293,8 +293,6 @@ const ManagerTeamDashboard: React.FC = () => {
                                     title="Auditors"
                                     people={displayAuditors}
                                     totalCount={dashboardData.totalAuditors}
-                                    showMessages={true}
-                                    isLoading={false}
                                     onRefresh={fetchData}
                                 />
 
@@ -303,8 +301,6 @@ const ManagerTeamDashboard: React.FC = () => {
                                     title="Counsellors"
                                     people={displayCounsellors}
                                     totalCount={dashboardData.totalCounsellors}
-                                    showMessages={false}
-                                    isLoading={false}
                                     onRefresh={fetchData}
                                 />
                             </div>

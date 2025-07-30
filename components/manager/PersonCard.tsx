@@ -3,7 +3,6 @@ import { Phone, MessageCircle, Ellipsis, X, AlertTriangle } from 'lucide-react';
 import { PersonData } from '@/types/dashboard';
 import { useEffect } from 'react';
 import axios from 'axios';
-import { on } from 'events';
 
 interface PersonCardProps {
     person: PersonData;
