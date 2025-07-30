@@ -15,7 +15,7 @@ interface PersonCardProps {
  * PersonCard component - displays individual person information
  */
 const PersonCard: React.FC<PersonCardProps> = ({ person, showMessages = false, onRefresh }) => {
-    const { name, id, role, callCount, messageCount, isActive } = person;
+    const { name, id, role, email, callCount, messageCount, isActive } = person;
     const [openList, setOpenList] = React.useState(false);
     const [showDialog, setShowDialog] = React.useState(false);
     const [isLoading, setIsLoading] = React.useState(false);
@@ -117,7 +117,7 @@ const PersonCard: React.FC<PersonCardProps> = ({ person, showMessages = false, o
                             </div>
                         </div>
                         <div className="text-sm text-gray-600">
-                            {id}
+                            {email}
                         </div>
                     </div>
                 </div>

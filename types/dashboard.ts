@@ -6,6 +6,8 @@ export interface UserProfile {
     id: string;
     team: string;
     role: string;
+    email: string;
+    manager?:string;
 }
 
 /**

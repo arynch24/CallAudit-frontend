@@ -24,7 +24,7 @@ const StickyHeader: React.FC<StickyHeaderProps> = ({ profile, header }) => {
                 <div className="flex items-center justify-between">
                     {/* Dashboard Title */}
                     <div>
-                        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-qc-primary">
+                        <h1 className="text-xl pl-12 md:pl-0 sm:text-2xl lg:text-3xl font-bold text-qc-primary">
                             {header}
                         </h1>
                     </div>

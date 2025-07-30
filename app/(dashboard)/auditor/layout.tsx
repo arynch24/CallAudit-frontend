@@ -39,8 +39,9 @@ const DashboardLayout = ({ children }: Readonly<{ children: React.ReactNode; }>)
                     profile={{
                         name: user?.name || '',
                         id: user?.id || '',
-                        team: 'teamname',
-                        role: user?.role || ''
+                        team: user?.manager?.split(' ')[0] + ' Team',
+                        role: user?.role || '',
+                        email: user?.email || '',
                     }}
                 />
                 {/* Main Content */}
