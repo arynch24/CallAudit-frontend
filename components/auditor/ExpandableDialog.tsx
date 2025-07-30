@@ -1,18 +1,21 @@
 import React from 'react';
-import { X, Maximize2 } from 'lucide-react';
+import { X } from 'lucide-react';
+import { MarkdownContent } from '../../utils/parseMarkdown';
 
 interface ExpandableDialogProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
   content: string;
+  isMarkdown?: boolean;
 }
 
 const ExpandableDialog: React.FC<ExpandableDialogProps> = ({
   isOpen,
   onClose,
   title,
-  content
+  content,
+  isMarkdown = false
 }) => {
   if (!isOpen) return null;
 
@@ -32,9 +35,16 @@ const ExpandableDialog: React.FC<ExpandableDialogProps> = ({
         
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
-          <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-            {content}
-          </div>
+          {isMarkdown ? (
+            <MarkdownContent 
+              content={content}
+              className="text-sm text-gray-700 leading-relaxed"
+            />
+          ) : (
+            <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+              {content}
+            </div>
+          )}
         </div>
       </div>
     </div>

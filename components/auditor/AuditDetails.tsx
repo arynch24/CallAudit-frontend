@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Check, Pause, Play, ChevronRight, Maximize2,ChevronDown } from 'lucide-react';
+import { Check, Pause, Play, ChevronRight, Maximize2, ChevronDown } from 'lucide-react';
 import ExpandableDialog from './ExpandableDialog';
+import { MarkdownContent } from '../../utils/parseMarkdown';
 
 // Mock type for demonstration
 interface AuditItem {
@@ -250,14 +251,18 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
                             className="bg-gray-50 p-3 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
                             onClick={() => setShowSummaryDialog(true)}
                         >
-                            <p className="text-sm text-gray-700 leading-relaxed">
-                                {truncateText(audit.summary)}
-                            </p>
-                            {audit.summary.length > 150 && (
-                                <button className="text-qc-accent text-xs mt-1 hover:underline">
-                                    Click to read more
-                                </button>
-                            )}
+                            <div className="text-sm text-gray-700 leading-relaxed">
+                                {audit.summary.length > 150 ? (
+                                    <>
+                                        <MarkdownContent content={truncateText(audit.summary)} />
+                                        <button className="text-qc-accent text-xs mt-1 hover:underline">
+                                            Click to read more
+                                        </button>
+                                    </>
+                                ) : (
+                                    <MarkdownContent content={audit.summary} />
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -290,14 +295,18 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
                             className="bg-gray-50 p-3 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors"
                             onClick={() => setShowAnomaliesDialog(true)}
                         >
-                            <p className="text-sm text-gray-700">
-                                {truncateText(audit.anomalies)}
-                            </p>
-                            {audit.anomalies.length > 150 && (
-                                <button className="text-qc-accent text-xs mt-1 hover:underline">
-                                    Click to read more
-                                </button>
-                            )}
+                            <div className="text-sm text-gray-700">
+                                {audit.anomalies.length > 150 ? (
+                                    <>
+                                        <MarkdownContent content={truncateText(audit.anomalies)} />
+                                        <button className="text-qc-accent text-xs mt-1 hover:underline">
+                                            Click to read more
+                                        </button>
+                                    </>
+                                ) : (
+                                    <MarkdownContent content={audit.anomalies} />
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -367,6 +376,7 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
                 onClose={() => setShowSummaryDialog(false)}
                 title="Call Summary"
                 content={audit.summary}
+                isMarkdown={true}
             />
 
             <ExpandableDialog
@@ -374,6 +384,7 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
                 onClose={() => setShowAnomaliesDialog(false)}
                 title="Anomalies Detected"
                 content={audit.anomalies}
+                isMarkdown={true}
             />
         </>
     );
