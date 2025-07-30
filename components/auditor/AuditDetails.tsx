@@ -42,7 +42,7 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
     const [audioError, setAudioError] = useState('');
     const [showSummaryDialog, setShowSummaryDialog] = useState(false);
     const [showAnomaliesDialog, setShowAnomaliesDialog] = useState(false);
-    const [flagType, setFlagType] = useState('');
+    const [flagType, setFlagType] = useState('Normal');
 
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -322,8 +322,7 @@ const AuditDetails: React.FC<AuditDetailsProps> = ({
                                     onChange={(e) => setFlagType(e.target.value)}
                                     className="appearance-none px-3 py-2 pr-8 bg-red-50 text-red-700 rounded-lg hover:bg-red-100 transition-colors focus:outline-none cursor-pointer"
                                 >
-                                    <option value="">Flag</option>
-                                    <option value="Normal">Normal</option>
+                                    <option value="Normal">Flag</option>
                                     <option value="Concern">Concern</option>
                                     <option value="Fatal">Fatal</option>
                                 </select>

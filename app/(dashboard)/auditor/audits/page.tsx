@@ -153,7 +153,7 @@ const AiAuditsDashboard: React.FC = () => {
   /**
    * Unified handler for both approve and flag operations
    */
-  const handleApprove = async (auditId: string, comments?: string, flagType: string = '', flagReasons: string = '') => {
+  const handleApprove = async (auditId: string, comments?: string, flagType: string = 'Normal', flagReasons: string = '') => {
     try {
       const requestData = {
         call_id: auditId,
