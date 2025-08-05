@@ -15,7 +15,7 @@ import {
 import { usePathname } from 'next/navigation';
 import Image from 'next/image';
 import axios from 'axios';
-
+import LogoutDialog from '../LogoutDialog';
 
 // Define the structure for navigation items
 interface NavItem {
@@ -34,6 +34,10 @@ const QCAuditSidebar: React.FC = () => {
     // State to control sidebar visibility on mobile
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
+    
+    // State for logout dialog
+    const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
+    const [isLoggingOut, setIsLoggingOut] = useState(false);
 
     // Check if screen is mobile and set responsive behavior
     useEffect(() => {
@@ -65,10 +69,16 @@ const QCAuditSidebar: React.FC = () => {
             navigation: '/auditor'
         },
         {
-            id: 'aidits',
-            label: 'Audits',
+            id: 'audits',
+            label: 'AI Audits',
             icon: <FileCode2 size={20} />,
             navigation: '/auditor/audits',
+        },
+        {
+            id:'flagged-audits',
+            label: 'Flagged Audits',
+            icon: <Flag size={20} />,
+            navigation: '/auditor/flagged-audits',
         },
         {
             id: 'help',
@@ -89,20 +99,37 @@ const QCAuditSidebar: React.FC = () => {
     };
 
     /**
-     * Handle logout functionality
+     * Open logout confirmation dialog
+     */
+    const openLogoutDialog = () => {
+        setIsLogoutDialogOpen(true);
+    };
+
+    /**
+     * Close logout confirmation dialog
+     */
+    const closeLogoutDialog = () => {
+        setIsLogoutDialogOpen(false);
+    };
+
+    /**
+     * Handle logout functionality with confirmation
      */
     const handleLogout = async () => {
-        // Add logout logic here
+        setIsLoggingOut(true);
         try {
             await axios.get((`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auth/logout`), {
                 withCredentials: true,
             });
+            router.push('/');
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 console.error('Logout failed:', error.response?.data || error.message);
             }
+        } finally {
+            setIsLoggingOut(false);
+            setIsLogoutDialogOpen(false);
         }
-        router.push('/');
     };
 
     /**
@@ -159,7 +186,7 @@ const QCAuditSidebar: React.FC = () => {
                 flex flex-col transition-transform duration-300 z-50
             `}>
                 {/* Header Section */}
-                <div className="px-8 py-4 border-b border-gray-200">
+                <div className="px-8 py-[1.08rem] border-b border-gray-200">
                     <div className="flex items-center gap-3 cursor-pointer"
                         onClick={() => router.push('/')}>
                         {/* Institute of Innovation Logo */}
@@ -211,7 +238,7 @@ const QCAuditSidebar: React.FC = () => {
                 {/* Logout Section */}
                 <div className="p-4 border-t border-gray-200">
                     <button
-                        onClick={handleLogout}
+                        onClick={openLogoutDialog}
                         className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50 hover:text-gray-900 transition-colors group"
                         aria-label="Logout"
                     >
@@ -222,6 +249,14 @@ const QCAuditSidebar: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            {/* Logout Confirmation Dialog */}
+            <LogoutDialog
+                isOpen={isLogoutDialogOpen}
+                onClose={closeLogoutDialog}
+                onConfirm={handleLogout}
+                isLoading={isLoggingOut}
+            />
         </>
     );
 };

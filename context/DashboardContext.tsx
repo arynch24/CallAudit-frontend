@@ -4,8 +4,8 @@ import { createContext, useContext, useState, ReactNode } from 'react'
 
 //Define the context type
 type ContextType = {
-    openDialog: boolean;
-    setOpenDialog: (status: boolean) => void;
+    openAddMemberModal: boolean;
+    setOpenAddMemberModal: (status: boolean) => void;
 }
 
 // Create context with default undefined
@@ -17,9 +17,10 @@ type ContextProviderProps = {
 }
 
 export const ContextProvider = ({ children }: ContextProviderProps) => {
-    const [openDialog, setOpenDialog] = useState<boolean>(false);
+    const [openAddMemberModal, setOpenAddMemberModal] = useState<boolean>(false);
+
     return (
-        <Context.Provider value={{ openDialog, setOpenDialog }}>
+        <Context.Provider value={{ openAddMemberModal, setOpenAddMemberModal,  }}>
             {children}
         </Context.Provider>
     )

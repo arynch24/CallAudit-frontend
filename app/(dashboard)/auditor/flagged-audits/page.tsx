@@ -90,7 +90,7 @@ const groupReviewsByDate = (reviews: FlaggedReview[]): GroupedReviews => {
   const grouped: GroupedReviews = {};
 
   reviews.forEach(review => {
-    const date = new Date(review.callDateTime).toLocaleDateString('en-US', {
+    const date = new Date( review.callDateTime).toLocaleDateString('en-US', {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit'
@@ -126,7 +126,7 @@ const filterReviewsByDateRange = (reviews: FlaggedReview[], startDate: string, e
   if (!startDate && !endDate) return reviews;
 
   return reviews.filter(review => {
-    const reviewDate = new Date(review.callDateTime);
+    const reviewDate = new Date( review.callDateTime);
     const start = startDate ? new Date(startDate) : null;
     const end = endDate ? new Date(endDate + 'T23:59:59') : null; // Include the entire end date
 
@@ -143,7 +143,7 @@ const filterReviewsByDateRange = (reviews: FlaggedReview[], startDate: string, e
  * This component displays a list of flagged audit reviews with key information including:
  * - Total count of flagged reviews
  * - Call numbers and counsellor names
- * - Auditor comments and linked auditors
+ * - Auditor comments
  * - Flag reasons with visual indicators
  * - Date range filtering
  * - Reviews grouped by date and sorted by time
@@ -184,7 +184,7 @@ const FlaggedReviewsComponent: React.FC = () => {
 
       // Make API call to fetch flagged reviews data
       const response = await axios.get<FlaggedAuditsResponse>(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/manager/flagged-audits`,
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auditor/flagged-audits`,
         {
           withCredentials: true,
         }
@@ -207,7 +207,7 @@ const FlaggedReviewsComponent: React.FC = () => {
 
     try {
       await axios.get(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/manager/unflag?audit_id=${reviewId}`,
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/v1/auditor/unflag?audit_id=${reviewId}`,
         { withCredentials: true }
       );
 
@@ -345,9 +345,6 @@ const FlaggedReviewsComponent: React.FC = () => {
                       Auditor Comment
                     </th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
-                      Linked Auditor
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
                       Flag Reason
                     </th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-qc-accent">
@@ -363,7 +360,6 @@ const FlaggedReviewsComponent: React.FC = () => {
                       onUnflagReview={handleUnflagReview}
                       isUnflagging={unflaggingId === review.id}
                       showTimeOnly={true}
-                      role="manager"
                     />
                   ))}
                 </tbody>
@@ -379,7 +375,6 @@ const FlaggedReviewsComponent: React.FC = () => {
                   onUnflagReview={handleUnflagReview}
                   isUnflagging={unflaggingId === review.id}
                   showTimeOnly={true}
-                  role="manager"
                 />
               ))}
             </div>

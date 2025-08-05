@@ -2,7 +2,6 @@ import { LatestAiAuditsProps } from "@/types/dashboard";
 import { MoveUpRight } from 'lucide-react'
 import { useRouter } from "next/navigation";
 
-
 /**
  * LatestAiAudits Component - Displays list of recent ai audits
  * @param audits - Array of ai audit entries
@@ -20,7 +19,7 @@ const LatestAiAudits: React.FC<LatestAiAuditsProps> = ({ audits }) => {
                     <div
                         key={audit.id}
                         className="bg-white rounded-lg p-3 sm:p-4 flex items-center justify-between hover:shadow-md transition-shadow border-l-4 border-qc-accent"
-                        onClick={()=>router.push('/manager/team')}
+                        onClick={()=>router.push('/auditor/audits')}
                     >
                         <div className="flex-1 min-w-0">
                             <p className="text-sm sm:text-base font-medium truncate text-qc-primary">

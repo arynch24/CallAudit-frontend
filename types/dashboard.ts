@@ -6,6 +6,8 @@ export interface UserProfile {
     id: string;
     team: string;
     role: string;
+    email: string;
+    manager?:string;
 }
 
 /**
@@ -111,7 +113,6 @@ interface AuditItem {
  duration: number;
  confidence: number;
  tags: string[];
- type: string;
  summary: string;
  sentiments: 'Positive' | 'Negative' | 'Neutral';
  anomalies: string;
@@ -132,6 +133,7 @@ interface AuditItem {
     callCount: number;
     messageCount?: number;
     email?: string;
+    isActive: boolean;
 }
 
 /**
@@ -143,3 +145,17 @@ export interface StatsCardData {
     icon: React.ComponentType<any>;
     isHighlighted?: boolean;
 }
+
+/**
+ * Interface for individual flagged review data structure
+ * Represents the processed data format used by the UI components
+ */
+export interface FlaggedReview {
+    id: string;
+    callDateTime: string;
+    callNumber: string;
+    counsellor: string;
+    auditorComment: string;
+    linkedAuditor: string;
+    flagReason: string;
+  }

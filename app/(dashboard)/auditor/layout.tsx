@@ -16,6 +16,8 @@ const DashboardLayout = ({ children }: Readonly<{ children: React.ReactNode; }>)
                 return 'Auditor Dashboard';
             case '/auditor/audits':
                 return 'AI Audits';
+            case '/auditor/flagged-audits':
+                return 'Flagged Audits';
             case '/auditor/help':
                 return 'Help';
             default:
@@ -37,8 +39,9 @@ const DashboardLayout = ({ children }: Readonly<{ children: React.ReactNode; }>)
                     profile={{
                         name: user?.name || '',
                         id: user?.id || '',
-                        team: 'teamname',
-                        role: user?.role || ''
+                        team: user?.manager?.split(' ')[0] + ' Team',
+                        role: user?.role || '',
+                        email: user?.email || '',
                     }}
                 />
                 {/* Main Content */}

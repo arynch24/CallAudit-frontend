@@ -19,12 +19,12 @@ const StickyHeader: React.FC<StickyHeaderProps> = ({ profile, header }) => {
     };
 
     return (
-        <header className="sticky top-0 bg-white border-b shadow-sm border-gray-200 z-30">
+        <header className="sticky top-0 bg-white border-b border-gray-200 z-30">
             <div className="px-4 sm:px-6 lg:px-8 py-2">
                 <div className="flex items-center justify-between">
                     {/* Dashboard Title */}
                     <div>
-                        <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-qc-primary">
+                        <h1 className="text-xl pl-12 md:pl-0 sm:text-2xl lg:text-3xl font-bold text-qc-primary">
                             {header}
                         </h1>
                     </div>

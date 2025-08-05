@@ -39,10 +39,10 @@ const ProfileCard: React.FC<ProfileCardProps> = ({ profile, isOpen, onClose }) =
                     <div className="space-y-2">
                         <div className="flex justify-between items-center py-1">
                             <span className="text-sm font-medium text-qc-dark">
-                                {profile.role === 'manager' ? "Manager ID:" : "Auditor ID"}
+                                {"Email Id:"}
                             </span>
                             <span className="text-sm text-qc-primary">
-                                {profile.id}
+                                {profile.email}
                             </span>
                         </div>
 

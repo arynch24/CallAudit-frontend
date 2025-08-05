@@ -7,3 +7,13 @@
   --color-qc-primary: #1B2028;
   --color-qc-accent: #486AA0;
 }
+
+@layer utilities {
+  .scrollbar-hide {
+    scrollbar-width: none;         /* Firefox */
+    -ms-overflow-style: none;      /* Internet Explorer 10+ */
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;                 /* Safari and Chrome */
+  }
+}

@@ -51,33 +51,11 @@ interface AuditsDashboardData {
   stats: AuditStats;
 }
 
-/**
- * Global cache object that persists across component re-renders
- */
-interface AuditDashboardCache {
-  data: AuditsDashboardData | null;
-  timestamp: number | null;
-  isLoading: boolean;
-  error: string | null;
-}
-
-const auditDashboardCache: AuditDashboardCache = {
-  data: null,
-  timestamp: null,
-  isLoading: false,
-  error: null
-};
-
-/**
- * Cache duration in milliseconds (2 minutes for more frequent updates)
- */
-const CACHE_DURATION = 2 * 60 * 1000;
-
 const AiAuditsDashboard: React.FC = () => {
-  const [auditsDashboardData, setAuditsDashboardData] = useState<AuditsDashboardData | null>(auditDashboardCache.data);
+  const [auditsDashboardData, setAuditsDashboardData] = useState<AuditsDashboardData | null>(null);
   const [selectedAudit, setSelectedAudit] = useState<AuditItem | null>(null);
-  const [error, setError] = useState<string>(auditDashboardCache.error || '');
-  const [isLoading, setIsLoading] = useState<boolean>(auditDashboardCache.isLoading);
+  const [error, setError] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isApproveLoading, setIsApproveLoading] = useState<boolean>(false);
 
   /**
@@ -90,18 +68,9 @@ const AiAuditsDashboard: React.FC = () => {
     const transformedAudits: AuditItem[] = calls ? calls.map(call => ({
       id: call.id,
       callId: call.client_number,
-      duration: call.duration,
-      confidence: call.ai_confidence,
-      tags: call.tags ? call.tags.split(',').map(tag => tag.trim()).filter(tag => tag) : [],
-      type: (() => {
-        if (!call.tags) return 'General';
-        const tagLower = call.tags.toLowerCase();
-        if (tagLower.includes('voice assistant')) return 'Voice Assistant';
-        if (tagLower.includes('support')) return 'Support';
-        if (tagLower.includes('sales')) return 'Sales';
-        if (tagLower.includes('intermediate')) return 'Intermediate';
-        return 'General';
-      })(),
+      duration: call.duration/60,
+      confidence: call.ai_confidence*100,
+      tags: call.tags ? call.tags.split(',').map(tag => tag.trim()) : [],
       summary: call.summary || 'No summary available',
       sentiments: call.sentiment_score > 0 ? 'Positive' : call.sentiment_score < 0 ? 'Negative' : 'Neutral',
       anomalies: call.anomalies || 'No anomalies detected',
@@ -126,25 +95,10 @@ const AiAuditsDashboard: React.FC = () => {
   };
 
   /**
-   * Checks if the cached data is still valid
+   * Fetches audit data from the API
    */
-  const isCacheValid = (): boolean => {
-    if (!auditDashboardCache.timestamp) return false;
-    return Date.now() - auditDashboardCache.timestamp < CACHE_DURATION;
-  };
-
-  /**
-   * Fetches audit data from the API with intelligent caching
-   */
-  const fetchAuditData = async (force: boolean = false): Promise<void> => {
-    if (auditDashboardCache.isLoading) return;
-
-    if (!force && auditDashboardCache.data && isCacheValid()) {
-      return;
-    }
-
+  const fetchAuditData = async (): Promise<void> => {
     try {
-      auditDashboardCache.isLoading = true;
       setIsLoading(true);
       setError('');
 
@@ -159,10 +113,6 @@ const AiAuditsDashboard: React.FC = () => {
       );
       const transformedData = transformAuditData(response.data);
 
-      auditDashboardCache.data = transformedData;
-      auditDashboardCache.timestamp = Date.now();
-      auditDashboardCache.error = null;
-
       setAuditsDashboardData(transformedData);
 
       // Auto-select first audit if available and no audit is currently selected
@@ -171,11 +121,9 @@ const AiAuditsDashboard: React.FC = () => {
       }
 
     } catch (err: any) {
-      const errorMsg = err.response?.data?.message || err.message || 'Failed to fetch audit data';
-      auditDashboardCache.error = errorMsg;
+      const errorMsg = err.response?.data?.message || 'Failed to fetch audit data';
       setError(errorMsg);
     } finally {
-      auditDashboardCache.isLoading = false;
       setIsLoading(false);
     }
   };
@@ -205,12 +153,12 @@ const AiAuditsDashboard: React.FC = () => {
   /**
    * Unified handler for both approve and flag operations
    */
-  const handleApprove = async (auditId: string, comments?: string, isFlag: boolean = false, flagReasons: string = '') => {
+  const handleApprove = async (auditId: string, comments?: string, flagType: string = 'Normal', flagReasons: string = '') => {
     try {
       const requestData = {
         call_id: auditId,
         comments: comments || '',
-        is_flag: isFlag,
+        flag: flagType.toUpperCase(),
         flag_reasons: flagReasons,
       };
       setIsApproveLoading(true);
@@ -233,7 +181,7 @@ const AiAuditsDashboard: React.FC = () => {
           ...auditsDashboardData.stats,
           totalCompleted: auditsDashboardData.stats.totalCompleted + 1,
           totalPending: Math.max(0, auditsDashboardData.stats.totalPending - 1),
-          flaggedCount: isFlag
+          flaggedCount: flagType
             ? auditsDashboardData.stats.flaggedCount + 1
             : auditsDashboardData.stats.flaggedCount
         };
@@ -244,7 +192,6 @@ const AiAuditsDashboard: React.FC = () => {
         };
 
         setAuditsDashboardData(updatedData);
-        auditDashboardCache.data = updatedData;
 
         // Select next audit if current one was processed
         if (selectedAudit?.id === auditId) {
@@ -255,7 +202,7 @@ const AiAuditsDashboard: React.FC = () => {
       handleAuditApprove(auditId);
 
     } catch (err: any) {
-      const errorMsg = err.response?.data?.message || err.message || `Failed to ${isFlag ? 'flag' : 'approve'} audit`;
+      const errorMsg = err.response?.data?.message || err.message || 'Failed to approve audit';
       setError(errorMsg);
     } finally {
       setIsApproveLoading(false);
@@ -263,32 +210,21 @@ const AiAuditsDashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    if (auditDashboardCache.data && isCacheValid()) {
-      setAuditsDashboardData(auditDashboardCache.data);
-      setError(auditDashboardCache.error || '');
-      setIsLoading(false);
-
-      // Auto-select first audit if available
-      if (auditDashboardCache.data.audits.length > 0 && !selectedAudit) {
-        setSelectedAudit(auditDashboardCache.data.audits[0]);
-      }
-    } else {
-      fetchAuditData();
-    }
+    fetchAuditData();
   }, []);
 
-  // Show loading spinner only if we don't have any data to display
-  if (isLoading && !auditsDashboardData) {
+  // Show loading spinner while fetching data
+  if (isLoading) {
     return <Loader text='Loading AI Audits Dashboard' />;
   }
 
-  // Show error page only if we have an error and no cached data to fall back to
-  if (error && !auditsDashboardData) {
-    return <Error message={error} onRetry={() => fetchAuditData(true)} />;
+  // Show error page if there's an error
+  if (error) {
+    return <Error message={error} onRetry={fetchAuditData} />;
   }
 
   return (
-    <div className="min-h-screen p-4">
+    <div className="p-4">
       <div className="max-w-7xl mx-auto">
         {auditsDashboardData && (
           <>
@@ -320,7 +256,7 @@ const AiAuditsDashboard: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
+                  <div className="space-y-3 max-h-[calc(100vh-270px)] scrollbar-hide overflow-y-auto">
                     {auditsDashboardData.audits.map((audit) => (
                       <AuditQueueItem
                         key={audit.id}
@@ -349,13 +285,6 @@ const AiAuditsDashboard: React.FC = () => {
                 />
               </div>
             </div>
-
-            {/* Warning message if there's an error but we have cached data to show */}
-            {error && auditsDashboardData && (
-              <div className="mt-4 p-4 bg-yellow-100 border border-yellow-400 text-yellow-700 rounded">
-                Warning: Failed to refresh data. Showing cached data. Error: {error}
-              </div>
-            )}
           </>
         )}
       </div>
